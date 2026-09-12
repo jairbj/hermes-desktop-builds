@@ -155,7 +155,8 @@ The suite is **not called green** when either fails; raw JSON/logs and the excep
 classification are retained. Windows also reports one explicit cross-Darwin fixture
 exception: a test expects POSIX mode 0755, but Windows exposes 0666. Actual Mac helper
 modes and native PTY execution are tested on Macs; no native feature is faked or removed.
-This exception is Windows-only. All exceptions apply only to that exact commit.
+This Windows exception is platform-bound (NTFS), not pin-bound. The two Linux suite
+exceptions apply only to that exact commit.
 Temporary Git test directories use GIT_CEILING_DIRECTORIES so they cannot accidentally
 discover or change the enclosing build repository.
 
@@ -193,7 +194,7 @@ automation was introduced. That older release is skipped, not installed as a dow
 Node/toolchain changes and patch conflicts still require a maintainer; the workflow never
 auto-edits a patch, invents test exceptions, or blindly updates dependencies to make CI pass.
 Build revisions are monotonic: upstream Desktop `0.17.0`, revision `3` becomes `0.17.0.3`.
-The existing exact-commit test exceptions do not carry forward to another upstream commit.
+The existing exact-commit Linux suite exceptions do not carry forward to another upstream commit. The Windows POSIX-mode fixture exception is platform-bound.
 No in-app update feed is configured.
 
 After a main-branch build succeeds, **Publish verified release** starts automatically via

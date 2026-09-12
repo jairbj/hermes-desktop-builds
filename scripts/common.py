@@ -122,9 +122,11 @@ def gate_test_report(report, pin, returncode, platform=None):
             name = suite['name'].replace('\\','/')
             match = next((reason for (file,title),reason in KNOWN_FAILURES.items()
                           if name.endswith('/'+file) and a['fullName']==title),None)
-            if platform=='win32' and name.endswith('/scripts/stage-native-deps.test.mjs') and a['fullName']=='darwin staging ships the Swift helper executable and the rewritten windows.js':
+            windows_posix = (platform=='win32' and name.endswith('/scripts/stage-native-deps.test.mjs')
+                             and a['fullName']=='darwin staging ships the Swift helper executable and the rewritten windows.js')
+            if windows_posix:
                 match='Cross-Darwin fixture asserts POSIX 0755 on Windows (0666); actual Mac helper mode is verified in native Mac builds.'
-            if pin['commit'] != KNOWN_COMMIT or not match:
+            if not match or (not windows_posix and pin['commit'] != KNOWN_COMMIT):
                 raise ValueError(f'Unreviewed upstream failure: {name}: {a["fullName"]}')
             failures.append({'file':name,'test':a['fullName'],'reason':match})
     if len(failures)!=report.get('numFailedTests',0) or (returncode and not failures):

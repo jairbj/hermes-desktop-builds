@@ -56,16 +56,19 @@ class BuildTests(unittest.TestCase):
             result=subprocess.run(['git','rev-parse','--show-toplevel'],cwd=work/'src',env=env,capture_output=True)
             self.assertEqual(result.returncode,0,'Actual source repo remains discoverable')
 
-    def test_windows_permission_exception_is_platform_and_commit_bound(self):
+    def test_windows_permission_exception_is_platform_bound(self):
         report={'numTotalTests':1,'numFailedTests':1,'testResults':[{'name':'/src/scripts/stage-native-deps.test.mjs','status':'failed','assertionResults':[{'fullName':'darwin staging ships the Swift helper executable and the rewritten windows.js','status':'failed'}]}]}
         report['runCompletion']={'reason':'failed','unhandledErrors':[]}
         self.assertFalse(gate_test_report(report,PIN,1,'win32')['suiteGreen'])
+        # NTFS always reports 0666 for this Darwin fixture; Mac lanes verify 0755.
+        other_pin={**PIN,'commit':'9'*40}
+        self.assertFalse(gate_test_report(report,other_pin,1,'win32')['suiteGreen'])
         for mutation in [lambda r:r['testResults'][0].update(message='afterAll error'),lambda r:r['runCompletion'].update(unhandledErrors=['unhandled']),lambda r:r.update(numTotalTests=99)]:
             changed=json.loads(json.dumps(report));mutation(changed)
             with self.assertRaises(ValueError):gate_test_report(changed,PIN,1,'win32')
         with self.assertRaises(ValueError):gate_test_report(report,PIN,137,'win32')
         with self.assertRaises(ValueError):gate_test_report(report,PIN,1,'darwin')
-        with self.assertRaises(ValueError):gate_test_report(report,{**PIN,'commit':'1'*40},1,'win32')
+        with self.assertRaises(ValueError):gate_test_report(report,PIN,1,'linux')
 
     def test_clean_test_report(self):
         r={'numTotalTests':3,'numPassedTests':3,'numFailedTests':0,'numRuntimeErrorTestSuites':0,'testResults':[{'name':'passing.test.ts','status':'passed','assertionResults':[{'status':'passed'}]*3}],'runCompletion':{'reason':'passed','unhandledErrors':[]}}
