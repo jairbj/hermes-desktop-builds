@@ -70,6 +70,22 @@ class BuildTests(unittest.TestCase):
         with self.assertRaises(ValueError):gate_test_report(report,PIN,1,'darwin')
         with self.assertRaises(ValueError):gate_test_report(report,PIN,1,'linux')
 
+    def test_reviewed_linux_full_suite_failures_are_commit_bound(self):
+        pin={'repository':'NousResearch/hermes-agent','commit':'939e45c91d751fadd94dcd1b873ac3cb44846213','version':'0.17.2','revision':1,'node':'22.22.2'}
+        rows=[
+            ('/apps/desktop/electron/ssh-connection.test.ts','controlSocketPath default base stays under sun_path even with the temp-listener suffix'),
+            ('/apps/desktop/src/store/voice-prefs.test.ts','keeps the desktop toggle local across config refreshes'),
+            ('/apps/desktop/src/store/voice-prefs.test.ts','migrates the legacy preference once, not on every refresh'),
+        ]
+        report={'numTotalTests':3,'numFailedTests':3,'testResults':[
+            {'name':name,'status':'failed','assertionResults':[{'fullName':title,'status':'failed'}]} for name,title in rows
+        ],'runCompletion':{'reason':'failed','unhandledErrors':[]}}
+        self.assertFalse(gate_test_report(report,pin,1)['suiteGreen'])
+        with self.assertRaises(ValueError):gate_test_report(report,PIN,1)
+        unknown=json.loads(json.dumps(report))
+        unknown['testResults'][0]['assertionResults'][0]['fullName']='some other ssh assertion'
+        with self.assertRaises(ValueError):gate_test_report(unknown,pin,1)
+
     def test_clean_test_report(self):
         r={'numTotalTests':3,'numPassedTests':3,'numFailedTests':0,'numRuntimeErrorTestSuites':0,'testResults':[{'name':'passing.test.ts','status':'passed','assertionResults':[{'status':'passed'}]*3}],'runCompletion':{'reason':'passed','unhandledErrors':[]}}
         self.assertEqual(gate_test_report(r,PIN,0)['allowedFailures'],[])

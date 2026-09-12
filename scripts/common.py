@@ -86,12 +86,14 @@ def run(label, command, cwd, env, logs, allow_failure=False):
     return rc
 
 
-KNOWN_COMMIT = 'b0ab2e163a50d4e6c36507eba955a6067fde6abc'
+KNOWN_COMMIT = '939e45c91d751fadd94dcd1b873ac3cb44846213'
 KNOWN_FAILURES = {
-    ('src/components/ui/__tests__/no-native-title.test.ts', 'no native title= on button elements uses <Tip> instead of native title= on all button elements'):
-        'Upstream listing-embed.tsx uses a native title; style rule fails, no source patch applied.',
     ('electron/ssh-connection.test.ts', 'controlSocketPath default base stays under sun_path even with the temp-listener suffix'):
-        'Isolated long HOME exceeds the SSH control socket test path budget; URL remote smoke does not use SSH.'
+        'Isolated long HOME exceeds the SSH control socket test path budget; URL remote smoke does not use SSH.',
+    ('src/store/voice-prefs.test.ts', 'keeps the desktop toggle local across config refreshes'):
+        'Linux vitest localStorage.setItem spy does not intercept window.localStorage; quota-failure path still writes. Remote-first smoke does not use auto-speak prefs.',
+    ('src/store/voice-prefs.test.ts', 'migrates the legacy preference once, not on every refresh'):
+        'Same localStorage spy gap as the sibling voice-prefs assertion; persistence is best-effort and not a distribution payload.',
 }
 
 

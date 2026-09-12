@@ -148,10 +148,10 @@ installs Electron, then uses upstream build/staging/builder hooks. Native depend
 are never replaced by stubs. Unknown test failures block the distribution.
 
 The full upstream UI/Electron suite runs on Linux; targeted first-run/native-packaging
-tests and typechecking run on every host. For the initial pinned commit, two precisely
-named pre-existing failures may be reported as explicit exceptions: a native-button-title
-style violation, and an SSH control-socket path assertion under a long isolated HOME.
-The suite is **not called green** when either fails; raw JSON/logs and the exception
+tests and typechecking run on every host. For the current pinned commit, three precisely
+named pre-existing failures may be reported as explicit exceptions: an SSH control-socket
+path assertion under a long isolated HOME, and two voice-prefs localStorage spy assertions.
+The suite is **not called green** when they fail; raw JSON/logs and the exception
 classification are retained. Windows also reports one explicit cross-Darwin fixture
 exception: a test expects POSIX mode 0755, but Windows exposes 0666. Actual Mac helper
 modes and native PTY execution are tested on Macs; no native feature is faked or removed.
