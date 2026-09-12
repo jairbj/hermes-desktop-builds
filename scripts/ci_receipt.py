@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import subprocess
 
-REPO = 'frankhommers/hermes-desktop-builds'
+REPO = 'jairbj/hermes-desktop-builds'
 REQUIRED_JOBS = {'scripts', 'native-darwin-arm64', 'native-darwin-x64',
                  'native-win32-x64', 'native-linux-x64'}
 

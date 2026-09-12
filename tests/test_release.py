@@ -23,7 +23,7 @@ class ReleaseTests(unittest.TestCase):
     def test_missing_distributions_never_create_publish_directory(self):
         with tempfile.TemporaryDirectory() as tmp:
             base=Path(tmp);dest=base/'release'
-            with self.assertRaises(ValueError):prepare(base,dest,'https://github.com/frankhommers/hermes-desktop-builds/actions/runs/123')
+            with self.assertRaises(ValueError):prepare(base,dest,'https://github.com/jairbj/hermes-desktop-builds/actions/runs/123')
             self.assertFalse(dest.exists())
             with self.assertRaises(ValueError):prepare(base,dest,'https://evil.example/run/123')
             self.assertFalse(dest.exists())

@@ -32,7 +32,7 @@ import sys
 import time
 
 UPSTREAM = 'NousResearch/hermes-agent'
-DOWNSTREAM = 'frankhommers/hermes-desktop-builds'
+DOWNSTREAM = 'jairbj/hermes-desktop-builds'
 ROOT = Path(__file__).resolve().parents[1]
 SHA = re.compile(r'[0-9a-f]{40}')
 VERSION = re.compile(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)')

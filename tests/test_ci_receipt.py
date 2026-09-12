@@ -7,7 +7,7 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from ci_receipt import validate_build_receipt, validate_build_jobs, validate_release_order
 
-REPO = 'frankhommers/hermes-desktop-builds'
+REPO = 'jairbj/hermes-desktop-builds'
 
 
 def receipt():

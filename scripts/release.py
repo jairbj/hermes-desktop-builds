@@ -11,7 +11,7 @@ from package import digest
 from macos_signing import validate_signing_receipt
 from source_patches import PATCH_DIR, patch_set, validate_patch_receipt
 
-REPO='frankhommers/hermes-desktop-builds'
+REPO='jairbj/hermes-desktop-builds'
 TARGETS=[('darwin','arm64'),('darwin','x64'),('win32','x64'),('linux','x64')]
 
 
@@ -78,7 +78,7 @@ def verify_distribution(directory, pin, target):
 
 
 def prepare(downloads,destination,run_url):
-    if not re.fullmatch(r'https://github.com/frankhommers/hermes-desktop-builds/actions/runs/[0-9]+',run_url):raise ValueError('Invalid run URL')
+    if not re.fullmatch(r'https://github.com/'+re.escape(REPO)+r'/actions/runs/[0-9]+',run_url):raise ValueError('Invalid run URL')
     if destination.exists():raise ValueError('Refusing to overwrite a release directory')
     pin=load_pin();version=release_version(pin)
     manifests={}

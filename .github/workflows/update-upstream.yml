@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   prepare:
-    if: github.repository == 'frankhommers/hermes-desktop-builds' && github.ref == 'refs/heads/main'
+    if: github.repository == 'jairbj/hermes-desktop-builds' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -78,7 +78,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.run_id }}
-        run: gh run download "$RUN_ID" --repo frankhommers/hermes-desktop-builds --name upstream-plan --dir out/update
+        run: gh run download "$RUN_ID" --repo jairbj/hermes-desktop-builds --name upstream-plan --dir out/update
       - name: Revalidate, fast-forward pin only, explicitly dispatch native build
         env:
           GH_TOKEN: ${{ github.token }}

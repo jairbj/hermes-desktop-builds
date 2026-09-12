@@ -5,24 +5,19 @@ explicit UI patch applied before building and signing.
 This is a build/distribution repository, not a Hermes fork, website wrapper, or the
 Tauri `Hermes-Setup` agent bootstrap installer. Not an official Nous Research release.
 
+This publisher is [`jairbj/hermes-desktop-builds`](https://github.com/jairbj/hermes-desktop-builds).
+The pipeline was forked from [`frankhommers/hermes-desktop-builds`](https://github.com/frankhommers/hermes-desktop-builds);
+releases, Actions and downloads on this repository are independent of that original publisher.
+
 ## Distribution status
 
-**Release and tag 0.17.0.1 have been withdrawn. Do not use its Mac ZIPs.** They lack CodeResources seals while the Electron
-executables retain signatures, producing `code has no resources but signature indicates
-they must be present`. The earlier native-start/Brew checks did not detect this defect.
+Use [Latest release](https://github.com/jairbj/hermes-desktop-builds/releases/latest)
+on this repository. This publisher does not maintain a Homebrew tap.
 
-[Release 0.17.0.3](https://github.com/frankhommers/hermes-desktop-builds/releases/tag/v0.17.0.3)
-is the first automatically published release with the small remote-client UI patch.
-Its [four-platform native build](https://github.com/frankhommers/hermes-desktop-builds/actions/runs/33984384497)
-passed the distribution gates, and the separate [automatic publication](https://github.com/frankhommers/hermes-desktop-builds/actions/runs/33985138041)
-verified its artifacts before publishing. Both Mac architectures passed final-bundle and
-extracted-ZIP signature checks, ASAR integrity, negative resource/seal tests, and real
-direct-remote-first-run/native-PTY smoke tests. All targets built the same verified patched tree.
-
-For the current version, use [Latest release](https://github.com/frankhommers/hermes-desktop-builds/releases/latest)
-and the [tap](https://github.com/frankhommers/homebrew-tap/blob/main/casks/hermes-desktop.rb).
-The tap publishes an update only after actual Homebrew installation and deep/strict
-`codesign` verification on macOS 15 Apple Silicon and Intel.
+The original pipeline withdrew **release and tag 0.17.0.1**. Do not use those Mac ZIPs
+if you still have them: they lack CodeResources seals while the Electron executables
+retain signatures, producing `code has no resources but signature indicates they must
+be present`.
 
 **Gatekeeper still rejects the quarantined ad-hoc publisher.** These are valid code seals,
 not Developer ID signing or Apple notarization. Raw per-target evidence and the existing
@@ -69,27 +64,17 @@ closed loopback port, inactive bootstrap state and the actual packaged native PT
 
 ## Downloads and installation
 
-Use the [GitHub Releases](https://github.com/frankhommers/hermes-desktop-builds/releases)
+Use the [GitHub Releases](https://github.com/jairbj/hermes-desktop-builds/releases)
 page. Only publish a release after all four native lanes pass the distribution gate.
 Checksums, source pin and per-platform validation evidence accompany each release.
 
 ### macOS
 
 The `darwin-<arch>-adhoc.zip` release ZIP contains a complete, ad-hoc signed `Hermes.app`.
-Use the archive for your CPU. Signing happens during the build, never in cask hooks.
+Use the archive for your CPU. Signing happens during the build, never after download.
 macOS 12+ is the initial binary metadata floor, not a tested compatibility matrix.
 
-Install via the verified cask in [frankhommers/tap](https://github.com/frankhommers/homebrew-tap):
-
-```sh
-brew install --cask frankhommers/tap/hermes-desktop
-# Later:
-brew update
-brew upgrade --cask frankhommers/tap/hermes-desktop
-```
-
-Homebrew installs the app only. It does not install a local Hermes agent or bypass
-Gatekeeper. For manual installation, verify the ZIP's SHA256 against `SHA256SUMS`
+This publisher does not ship a Homebrew cask. Verify the ZIP's SHA256 against `SHA256SUMS`
 (`shasum -a 256 <download.zip>`), then use macOS `ditto`, preserving symlinks/modes:
 
 ```sh
@@ -107,8 +92,8 @@ trust this build. Never disable Gatekeeper/SIP or broadly remove quarantine.
 For “damaged”, `Killed: 9`, a crash or no app-specific exception: stop and diagnose:
 
 ```sh
-# Use the actual installation path: Brew normally uses /Applications.
-APP="/Applications/Hermes.app"
+# Use the actual installation path after ditto (often $HOME/Applications).
+APP="$HOME/Applications/Hermes.app"
 codesign --verify --deep --strict --verbose=2 "$APP"
 spctl --assess --type execute -vv "$APP"
 ```
@@ -227,14 +212,13 @@ are never overwritten. A delayed older build cannot become Latest over a newer v
 Patch hashes and the resulting source state are verified; patched sources are not described
 as unmodified. The first-run UI is checked on each real native packaged application. Patch
 conflicts, changed behavior, unknown test failures or invalid signatures fail closed: the
-last published release and existing tap remain available. Review failed Actions runs;
+last published release remains available. Review failed Actions runs;
 GitHub failure notifications depend on the repository/user notification settings.
 
-The Homebrew tap has a separate daily/manual sync: generate the cask from that public
-release manifest, audit/fetch/install it on Apple Silicon and Intel, then commit only
-the tested cask. No cross-repository PAT or Apple credential is required.
+This publisher does not sync a Homebrew tap. A `hermes-desktop.rb` cask is still
+attached to each GitHub Release as a generated asset (URLs and SHA256 for this
+repository); it is not installed or audited here.
 
-Publication and tap synchronization are separate from the untrusted dependency/build
-process. Never overwrite an existing release asset/version. Keep the full build run URL
-and pin in the release manifest. The tap must reference immutable URLs and SHA256 values,
-with no install hooks invoking an agent installer or disabling OS security.
+Publication is separate from the untrusted dependency/build process. Never overwrite
+an existing release asset/version. Keep the full build run URL and pin in the
+release manifest.
