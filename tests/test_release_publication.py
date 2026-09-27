@@ -19,7 +19,7 @@ class PublicationTests(unittest.TestCase):
         workflow = (ROOT / '.github/workflows/release.yml').read_text()
         tail = workflow.split('      - name: Create draft, verify exact assets, then publish', 1)[1]
         code = textwrap.dedent(tail.split('        run: |\n', 1)[1])
-        repo = 'frankhommers/hermes-desktop-builds'
+        repo = 'jairbj/hermes-desktop-builds'
         endpoint = f'https://api.github.com/repos/{repo}/releases/123'
         self.calls = []
         self.remote = None

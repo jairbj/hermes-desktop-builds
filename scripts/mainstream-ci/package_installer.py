@@ -10,7 +10,7 @@ VERSION = '1.0.2'
 TOKEN = 'hermes-desktop-mainstream'
 ASSET = f'Hermes-mainstream-{VERSION}.zip'
 TAG = f'mainstream-v{VERSION}'
-PUBLIC_URL = f'https://github.com/frankhommers/hermes-desktop-builds/releases/download/{TAG}/{ASSET}'
+PUBLIC_URL = f'https://github.com/jairbj/hermes-desktop-builds/releases/download/{TAG}/{ASSET}'
 FILES = ('Install.command', 'installer.py', 'brew_install.py', 'storage-audit.cjs', 'README.md')
 
 
@@ -49,7 +49,7 @@ cask "{TOKEN}" do
   url "{cask_url}"
   name "Hermes Desktop Mainstream"
   desc "One-time migration to the official in-app Desktop updater"
-  homepage "https://github.com/frankhommers/hermes-desktop-builds"
+  homepage "https://github.com/jairbj/hermes-desktop-builds"
 
   livecheck do
     skip "One-time installer; the installed client uses the official Hermes updater"

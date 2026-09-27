@@ -43,7 +43,7 @@ jobs:
           import hashlib, json, pathlib, subprocess, sys
           sys.path.insert(0, str(pathlib.Path('scripts').resolve()))
           from ci_receipt import validate_release_order
-          repo='frankhommers/hermes-desktop-builds'
+          repo='jairbj/hermes-desktop-builds'
           directory=pathlib.Path('out/release')
           manifest=json.loads((directory/'release-manifest.json').read_text())
           receipt=json.loads(pathlib.Path('out/build-receipt.json').read_text())

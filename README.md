@@ -5,24 +5,19 @@ explicit UI patch applied before building and signing.
 This is a build/distribution repository, not a Hermes fork, website wrapper, or the
 Tauri `Hermes-Setup` agent bootstrap installer. Not an official Nous Research release.
 
+This publisher is [`jairbj/hermes-desktop-builds`](https://github.com/jairbj/hermes-desktop-builds).
+The upstream community pipeline and builds are authored by
+[Frank Hommers](https://github.com/frankhommers/hermes-desktop-builds).
+
 ## Distribution status
 
-**Release and tag 0.17.0.1 have been withdrawn. Do not use its Mac ZIPs.** They lack CodeResources seals while the Electron
-executables retain signatures, producing `code has no resources but signature indicates
-they must be present`. The earlier native-start/Brew checks did not detect this defect.
+The original pipeline withdrew **release and tag 0.17.0.1**. Do not use those Mac ZIPs
+if you still have them: they lack CodeResources seals while the Electron executables
+retain signatures, producing `code has no resources but signature indicates they must
+be present`.
 
-[Release 0.17.0.3](https://github.com/frankhommers/hermes-desktop-builds/releases/tag/v0.17.0.3)
-is the first automatically published release with the small remote-client UI patch.
-Its [four-platform native build](https://github.com/frankhommers/hermes-desktop-builds/actions/runs/33984384497)
-passed the distribution gates, and the separate [automatic publication](https://github.com/frankhommers/hermes-desktop-builds/actions/runs/33985138041)
-verified its artifacts before publishing. Both Mac architectures passed final-bundle and
-extracted-ZIP signature checks, ASAR integrity, negative resource/seal tests, and real
-direct-remote-first-run/native-PTY smoke tests. All targets built the same verified patched tree.
-
-For the current version, use [Latest release](https://github.com/frankhommers/hermes-desktop-builds/releases/latest)
-and the [tap](https://github.com/frankhommers/homebrew-tap/blob/main/casks/hermes-desktop.rb).
-The tap publishes an update only after actual Homebrew installation and deep/strict
-`codesign` verification on macOS 15 Apple Silicon and Intel.
+Use [Latest release](https://github.com/jairbj/hermes-desktop-builds/releases/latest)
+to download installers and standalone archives for your platform.
 
 Upstream has separate version domains inside one source tag. For the current pin,
 `v2026.9.11` is the calendar release tag, Hermes Agent/backend is `0.21.2`, and the
@@ -77,7 +72,7 @@ closed loopback port, inactive bootstrap state and the actual packaged native PT
 
 ## Downloads and installation
 
-Use the [GitHub Releases](https://github.com/frankhommers/hermes-desktop-builds/releases)
+Use the [GitHub Releases](https://github.com/jairbj/hermes-desktop-builds/releases)
 page. Only publish a release after all four native lanes pass the distribution gate.
 Checksums, source pin and per-platform validation evidence accompany each release.
 

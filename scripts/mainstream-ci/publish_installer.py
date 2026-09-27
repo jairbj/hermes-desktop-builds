@@ -10,7 +10,7 @@ import zipfile
 
 from package_installer import ASSET, TAG, TOKEN, VERSION, PUBLIC_URL, FILES, cask_text
 
-REPO = 'frankhommers/hermes-desktop-builds'
+REPO = 'jairbj/hermes-desktop-builds'
 
 
 def gh(*args):

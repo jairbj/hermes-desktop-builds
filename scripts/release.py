@@ -11,7 +11,7 @@ from package import digest
 from macos_signing import validate_signing_receipt
 from source_patches import PATCH_DIR, patch_set, validate_patch_receipt
 
-REPO='frankhommers/hermes-desktop-builds'
+REPO='jairbj/hermes-desktop-builds'
 TARGETS=[('darwin','arm64'),('darwin','x64'),('win32','x64'),('linux','x64')]
 
 
