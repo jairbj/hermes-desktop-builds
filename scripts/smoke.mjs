@@ -14,14 +14,22 @@ env.PATH=process.platform==='win32'?path.join(env.SystemRoot||env.SYSTEMROOT||'C
 const args=['--user-data-dir='+path.join(home,'u'),'--enable-logging=stderr'];
 // Linux CI only: no host kernel/security changes; never Mac/Windows install advice.
 if(process.platform==='linux'){delete env.DISPLAY;delete env.XAUTHORITY;args.push('--disable-gpu','--no-sandbox','--ozone-platform=headless');}
+function smokeLog(message){fs.writeSync(1,message+'\n');}
+const smokeDeadline=setTimeout(()=>{smokeLog('SMOKE_TIMEOUT');process.exit(1);},280000);
 const errors=[];
 let app;
 try {
+  smokeLog('SMOKE_STEP launch');
   app=await _electron.launch({executablePath:binary,args,env,timeout:90000});
+  smokeLog('SMOKE_STEP firstWindow');
   const page=await app.firstWindow({timeout:90000});
+  page.setDefaultTimeout(90000);
+  page.setDefaultNavigationTimeout(90000);
   page.on('pageerror',err=>errors.push(String(err)));
+  smokeLog('SMOKE_STEP heading');
   await page.getByRole('heading',{name:'Connect to existing Hermes',exact:true}).waitFor({timeout:90000});
-  await page.getByPlaceholder('https://gateway.example.com/hermes').waitFor();
+  smokeLog('SMOKE_STEP placeholder');
+  await page.getByPlaceholder('https://gateway.example.com/hermes').waitFor({timeout:90000});
   assert.equal(await page.getByText('Install Hermes locally',{exact:true}).count(),0);
   assert.equal(await page.getByRole('button',{name:'Back',exact:true}).count(),0);
   fs.writeFileSync(path.join(logs,'first-run.txt'),await page.locator('body').innerText());
@@ -62,15 +70,17 @@ try {
   await new Promise(resolve=>guard.close(resolve));
   await page.getByPlaceholder('https://gateway.example.com/hermes').fill(`http://127.0.0.1:${port}`);
   const test=page.getByRole('button',{name:'Test connection',exact:true});
-  await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='Test connection'&&!b.disabled));
+  smokeLog('SMOKE_STEP test-connection');
+  await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='Test connection'&&!b.disabled),undefined,{timeout:90000});
   await test.click();
-  await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='Test connection'&&!b.disabled));
+  await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='Test connection'&&!b.disabled),undefined,{timeout:90000});
   const remoteProbe=await page.evaluate(url=>window.hermesDesktop.probeConnectionConfig(url),`http://127.0.0.1:${port}`);
   assert.equal(remoteProbe.reachable,false);
   assert(remoteProbe.error,'Actual native IPC/network probe must return an error');
   assert.equal(await page.getByRole('button',{name:'Apply and reconnect',exact:true}).isDisabled(),true);
   fs.writeFileSync(path.join(logs,'unreachable-remote.txt'),await page.locator('body').innerText());
-  const ptyResult=await app.evaluate(async({app})=>{
+  smokeLog('SMOKE_STEP pty');
+  const ptyResult=await Promise.race([app.evaluate(async({app})=>{
     const {createRequire}=process.getBuiltinModule('module');
     const req=createRequire(app.getAppPath()+'/dist/electron-main.mjs');
     const pty=req('node-pty');
@@ -82,7 +92,7 @@ try {
       t.onData(s=>output+=s);
       t.onExit(({exitCode})=>{clearTimeout(timeout);resolve({exitCode,output});});
     });
-  });
+  }),new Promise((_,reject)=>setTimeout(()=>reject(new Error('PTY evaluate timed out')),30000))]);
   assert.equal(ptyResult.exitCode,0);
   assert(ptyResult.output.includes('HERMES_NATIVE_PTY_OK'));
   const after=await page.evaluate(()=>window.hermesDesktop.getBootstrapState());
@@ -91,5 +101,21 @@ try {
   assert.equal(errors.length,0,JSON.stringify(errors));
   const result={platform:process.platform,arch:process.arch,paths,installStamp,sourceDesktopVersion,runtimeDesktopVersionInfo,runtimeDesktopVersion,firstRun:true,remoteForm:true,remoteSetupDirect:true,localInstallOfferAbsent:true,unreachableRemoteBlocksApply:true,bootstrap,ptyResult,errors,noAgentCheckout:true,localInstallStarted:false};
   fs.writeFileSync(path.join(logs,'smoke.json'),JSON.stringify(result,null,2)+'\n');
-  console.log('REAL NATIVE PACKAGED APP SMOKE:',JSON.stringify(result,null,2));
-} finally {if(app)await app.close();}
+  smokeLog('REAL NATIVE PACKAGED APP SMOKE: '+JSON.stringify(result));
+} catch(error){
+  smokeLog('SMOKE_FAIL '+(error&&error.stack?error.stack:error));
+  throw error;
+} finally {
+  clearTimeout(smokeDeadline);
+  if(app){
+    smokeLog('SMOKE_STEP close');
+    const closed=await Promise.race([
+      app.close().then(()=>true,()=>false),
+      new Promise(resolve=>setTimeout(()=>resolve(false),20000)),
+    ]);
+    if(!closed){
+      smokeLog('SMOKE_CLOSE_TIMEOUT');
+      try{app.process().kill('SIGKILL');}catch{}
+    }
+  }
+}

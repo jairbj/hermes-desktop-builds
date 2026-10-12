@@ -213,10 +213,11 @@ def main():
         smoke_env.update({name:short_tmp for name in ('TMPDIR','TMP','TEMP')})
         print('Private short Linux smoke temp:',short_tmp,flush=True)
     command=[node,str(ROOT/'scripts/smoke.mjs'),str(src),str(binary),str(WORK/'smoke/h'),str(logs)]
-    if target=='linux' and shutil.which('strace'):
-        command=[shutil.which('strace'),'-f','-e','trace=process,network,%file','-s','200','-o',str(logs/'native-strace.log')]+command
+    # Playwright's library default timeout is unlimited, and app.close() waits
+    # until Electron exits. A missed first-run check otherwise sits until the
+    # 70 minute job cap with an empty log. strace -f stops every Electron thread.
     try:
-        run('native-smoke',command,ROOT,smoke_env,logs)
+        run('native-smoke',command,ROOT,smoke_env,logs,timeout=300)
     finally:
         runtime_logs=WORK/'smoke/h/.hermes/logs'
         for name in ('desktop.log','gui.log'):

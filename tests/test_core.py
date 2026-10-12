@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import os
 from pathlib import Path
 import struct
 import subprocess
@@ -8,7 +9,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from common import validate_pin, clean_environment, gate_test_report
+from common import validate_pin, clean_environment, gate_test_report, run
 from package import binary_arches, make_archive, inventory, unpack_archive
 
 TEST_TMP=Path(__file__).resolve().parents[1]/'.work/test-tmp'
@@ -210,5 +211,11 @@ class BuildTests(unittest.TestCase):
                 self.assertEqual(inventory(app),inventory(target/app.name))
             (app/'bad').symlink_to('/etc/passwd')
             with self.assertRaises(ValueError):inventory(app)
+
+    def test_run_timeout_kills_a_silent_process(self):
+        logs=TEST_TMP/'timeout-logs'
+        with self.assertRaises(RuntimeError) as ctx:
+            run('sleepy',[sys.executable,'-c','import time; time.sleep(30)'],TEST_TMP,os.environ.copy(),logs,timeout=1)
+        self.assertIn('timed out after 1s',str(ctx.exception))
 
 if __name__=='__main__':unittest.main()

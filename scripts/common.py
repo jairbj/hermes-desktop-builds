@@ -4,7 +4,9 @@ from collections import Counter
 import os
 from pathlib import Path
 import re
+import signal
 import subprocess
+import threading
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -71,18 +73,50 @@ def clean_environment(work, pin, inherited=None):
     return env
 
 
-def run(label, command, cwd, env, logs, allow_failure=False):
+def _kill_process_tree(process):
+    if os.name == 'nt':
+        subprocess.run(['taskkill', '/F', '/T', '/PID', str(process.pid)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        process.kill()
+
+
+def run(label, command, cwd, env, logs, allow_failure=False, timeout=None):
     logs.mkdir(parents=True, exist_ok=True)
     start = time.monotonic()
+    timed_out = False
     with (logs/(label+'.log')).open('w', encoding='utf-8') as log:
         log.write(json.dumps({'command':list(map(str,command)), 'cwd':str(cwd), 'envKeys':sorted(env)})+'\n')
         log.flush()
-        p = subprocess.Popen(command, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace')
-        for line in p.stdout:
-            print(line, end='', flush=True)
-            log.write(line)
-        rc = p.wait()
+        popen_kwargs = dict(cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace')
+        # A new session lets the watchdog kill Electron children, not this build.
+        if timeout is not None and os.name != 'nt':
+            popen_kwargs['start_new_session'] = True
+        p = subprocess.Popen(command, **popen_kwargs)
+        finished = threading.Event()
+
+        def watchdog():
+            nonlocal timed_out
+            if not finished.wait(timeout):
+                timed_out = True
+                _kill_process_tree(p)
+
+        if timeout is not None:
+            threading.Thread(target=watchdog, daemon=True).start()
+        rc = None
+        try:
+            for line in p.stdout:
+                print(line, end='', flush=True)
+                log.write(line)
+            rc = p.wait()
+        finally:
+            finished.set()
+            p.stdout.close()
         log.write(f'\nEXIT_CODE={rc}; SECONDS={time.monotonic()-start:.2f}\n')
+    if timed_out:
+        raise RuntimeError(f'{label} timed out after {timeout}s; see {logs/(label+".log")}')
     if rc and not allow_failure:
         raise RuntimeError(f'{label} failed with exit {rc}; see {logs/(label+".log")}')
     return rc
