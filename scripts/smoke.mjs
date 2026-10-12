@@ -42,7 +42,7 @@ try {
     assert.match(installStamp.distributionVersion,/^\d+(?:\.\d+)+$/);
     assert.equal(runtimeDesktopVersion,installStamp.distributionVersion);
   }else{
-    assert.equal(installStamp.distribution,undefined);
+    assert.equal(installStamp.distribution,'desktop-app');
     if(sourceDesktopVersion==='0.0.0'){
       assert.match(runtimeDesktopVersion,/^\d+(?:\.\d+)+$/);
     }else{

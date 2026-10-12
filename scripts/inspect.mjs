@@ -68,7 +68,9 @@ if(platform==='darwin'){
   assert.equal(stamp.distribution,'frankhommers-homebrew');
   assert.equal(stamp.distributionVersion,distributionVersion);
 }else{
-  assert.equal(stamp.distribution,undefined);
+  // Upstream stamps every packaged desktop as desktop-app. The Homebrew
+  // identity is added only when the Mac build sets the distribution env.
+  assert.equal(stamp.distribution,'desktop-app');
   assert.equal(stamp.distributionVersion,undefined);
 }
 fs.writeFileSync(path.join(logs,'asar.json'),JSON.stringify({platform,arch,files:inventory.length,integrity:'all entries verified',stamp,inventory},null,2)+'\n');
