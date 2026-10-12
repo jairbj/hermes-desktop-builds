@@ -9,12 +9,36 @@ import plistlib
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 
 from common import ROOT, WORK, OUT, load_pin, release_version, archive_name, clean_environment, run, gate_test_report
 from package import digest, native_inventory, inventory, make_archive, unpack_archive
 from macos_signing import verify_bundle, verify_extracted
 from source_patches import apply_patches, verify_source_state
+
+
+def extract_npm_pack(tarball, dest):
+    """Unpack an `npm pack` tarball. The archive root is the `package/` directory."""
+    dest.mkdir(parents=True)
+    with tarfile.open(tarball, 'r:gz') as tar:
+        for member in tar.getmembers():
+            name = member.name
+            if name == 'package':
+                continue
+            prefix = 'package/'
+            if not name.startswith(prefix):
+                raise RuntimeError(f'Unexpected npm pack member: {name}')
+            relative = name[len(prefix):]
+            if not relative or relative.startswith('/') or '..' in Path(relative).parts:
+                raise RuntimeError(f'Unsafe npm pack path: {name}')
+            if member.issym() or member.islnk():
+                raise RuntimeError(f'Refusing link in npm pack: {name}')
+            member.name = relative
+            if sys.version_info >= (3, 12):
+                tar.extract(member, dest, filter='data')
+            else:
+                tar.extract(member, dest)
 
 
 def main():
@@ -63,7 +87,14 @@ def main():
     cmd('npm-ci',npm+['ci','--ignore-scripts','--no-audit','--no-fund','--workspace','apps/desktop','--include-workspace-root'],src)
     # electron/source-backend.test.ts imports ws. The lockfile only installs it
     # as a peer of ui-tui's ink, which this workspace-scoped ci does not include.
-    cmd('install-ws',npm+['install','ws@8.21.1','--no-save','--ignore-scripts','--no-audit','--no-fund','--no-package-lock'],src)
+    # npm install re-resolves that peer tree and fails, so unpack the registry
+    # tarball straight into node_modules.
+    pack=logs/'ws-pack'
+    pack.mkdir()
+    cmd('pack-ws',npm+['pack','ws@8.21.1','--pack-destination',str(pack)],pack)
+    tarballs=list(pack.glob('ws-*.tgz'))
+    if len(tarballs)!=1:raise RuntimeError('ws pack did not produce one tarball')
+    extract_npm_pack(tarballs[0], src/'node_modules'/'ws')
     env['DESKTOP_SIGNING_TEST_SOURCE']=str(src)
     cmd('mac-signing-api-unit-tests',[node,'--test',str(ROOT/'tests/macos-signing-api.test.mjs')])
     env.pop('DESKTOP_SIGNING_TEST_SOURCE')
