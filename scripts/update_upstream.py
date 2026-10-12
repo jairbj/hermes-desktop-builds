@@ -180,7 +180,7 @@ def compare_commits(api, current, candidate):
     return status
 
 
-def desktop_version(api, sha):
+def desktop_version(api, sha, release_tag=None):
     exact_sha(sha)
     content = api(f'repos/{UPSTREAM}/contents/apps/desktop/package.json?ref={sha}')
     require(isinstance(content, dict) and content.get('type') == 'file'
@@ -196,8 +196,16 @@ def desktop_version(api, sha):
     require(len(raw) == content['size'], 'package.json size mismatch')
     package = parse_json(raw)
     require(isinstance(package, dict), 'package.json must be an object')
-    version_tuple(package.get('version'))
-    return package['version']
+    raw_version = package.get('version')
+    version_tuple(raw_version)
+    if raw_version == '0.0.0':
+        require(isinstance(release_tag, str), 'Release tag required for 0.0.0 placeholder version')
+        exact_tag(release_tag)
+        tag_version = release_tag[1:]
+        version_tuple(tag_version)
+        require(tag_version != '0.0.0', 'Release tag version cannot be 0.0.0')
+        return tag_version
+    return raw_version
 
 
 def paginated(api, resource):
@@ -352,7 +360,7 @@ def plan_update(api, pin, base_sha):
     if status == 'identical':
         if 'releaseTag' not in pin or release['id'] != pin['releaseId']:
             return candidate, metadata
-        require(desktop_version(api, sha) == pin['version'], 'Pinned package version mismatch')
+        require(desktop_version(api, sha, release['tag']) == pin['version'], 'Pinned package version mismatch')
         versions = reserved_versions(api)
         current_version = (*version_tuple(pin['version']), pin['revision'])
         if any(version >= current_version for version in versions):
@@ -361,7 +369,7 @@ def plan_update(api, pin, base_sha):
             dispatch, reason = recovery_decision(api, pin, base_sha)
             metadata.update(action='dispatch' if dispatch else 'skip', reason=reason)
         return candidate, metadata
-    version = desktop_version(api, sha)
+    version = desktop_version(api, sha, release['tag'])
     numeric = version_tuple(version)
     require(numeric >= version_tuple(pin['version']), 'Refusing application version downgrade')
     versions = reserved_versions(api)

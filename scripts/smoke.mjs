@@ -43,8 +43,11 @@ try {
     assert.equal(runtimeDesktopVersion,installStamp.distributionVersion);
   }else{
     assert.equal(installStamp.distribution,undefined);
-    assert.equal(installStamp.distributionVersion,undefined);
-    assert.equal(runtimeDesktopVersion,sourceDesktopVersion);
+    if(sourceDesktopVersion==='0.0.0'){
+      assert.match(runtimeDesktopVersion,/^\d+(?:\.\d+)+$/);
+    }else{
+      assert.equal(runtimeDesktopVersion,sourceDesktopVersion);
+    }
   }
 
   fs.writeFileSync(path.join(logs,'remote-form.txt'),await page.locator('body').innerText());

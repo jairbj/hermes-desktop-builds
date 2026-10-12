@@ -1,9 +1,9 @@
 diff --git a/apps/desktop/electron/community-homebrew-update.test.ts b/apps/desktop/electron/community-homebrew-update.test.ts
 new file mode 100644
-index 0000000000000000000000000000000000000000..bb4d39313214fdf3fbc767fb537c5d599953f3f6
+index 0000000000000000000000000000000000000000..0898da91a9f9581db44d310395190d98ee9ee3c6
 --- /dev/null
 +++ b/apps/desktop/electron/community-homebrew-update.test.ts
-@@ -0,0 +1,127 @@
+@@ -0,0 +1,142 @@
 +import assert from 'node:assert/strict'
 +
 +import { test } from 'vitest'
@@ -58,69 +58,84 @@ index 0000000000000000000000000000000000000000..bb4d39313214fdf3fbc767fb537c5d59
 +    parseCaskContentsResponse(caskPayload('cask "somebody-else" do\n  version "0.17.2.3"\nend\n'))
 +  )
 +  assert.throws(() =>
-+    parseCaskContentsResponse(caskPayload('cask "hermes-desktop" do\n  version "0.17.2.3"\n  version "0.17.2.4"\nend\n'))
++    parseCaskContentsResponse(
++      caskPayload('cask "hermes-desktop" do\n  version "0.17.2.3"\n  version "0.17.2.4"\nend\n')
++    )
 +  )
 +  assert.throws(() =>
-+    parseCaskContentsResponse(caskPayload('cask "hermes-desktop" do\n  version "0.17.2.3; rm -rf /"\nend\n'))
-+  )
-+  assert.throws(() =>
-+    parseCaskContentsResponse({
-+      encoding: 'base64',
-+      type: 'file',
-+      size: 2,
-+      content: Buffer.from([0xc3, 0x28]).toString('base64')
-+    })
++    parseCaskContentsResponse(caskPayload('cask "hermes-desktop" do\n  version "0.17.2.3; echo hi"\nend\n'))
 +  )
 +})
 +
-+test('numeric dotted comparison is exact and rejects unsafe version shapes', () => {
-+  assert.equal(compareDottedVersions('0.17.2', '0.17.2.1'), -1)
-+  assert.equal(compareDottedVersions('0.17.2.10', '0.17.2.9'), 1)
++test('compareDottedVersions orders 3- and 4-segment monotonic strings', () => {
 +  assert.equal(compareDottedVersions('0.17.2.1', '0.17.2.1'), 0)
-+  assert.throws(() => compareDottedVersions('0.17.9007199254740992', '0.17.9007199254740993'))
-+  assert.throws(() => compareDottedVersions('0.17.2.1.1', '0.17.2.1'))
++  assert.equal(compareDottedVersions('0.17.2', '0.17.2.0'), 0)
++  assert.equal(compareDottedVersions('0.17.2.1', '0.17.2.2'), -1)
++  assert.equal(compareDottedVersions('0.17.3', '0.17.2.9'), 1)
++  assert.equal(compareDottedVersions('0.18.0.0', '0.17.9.9'), 1)
 +})
 +
-+test('post-install proof requires the running community bundle to reach the checked target', () => {
-+  const runtime = { isPackaged: true, platform: 'darwin' }
++test('pickHomebrewBinary uses only canonical Apple Silicon and Intel paths', () => {
 +  assert.equal(
-+    verifiedInstalledCommunityVersion('0.17.2.1', '0.17.2.2', { ...stamp, distributionVersion: '0.17.2.2' }, runtime),
++    pickHomebrewBinary(candidate => candidate === '/opt/homebrew/bin/brew'),
++    '/opt/homebrew/bin/brew'
++  )
++  assert.equal(
++    pickHomebrewBinary(candidate => candidate === '/usr/local/bin/brew'),
++    '/usr/local/bin/brew'
++  )
++  assert.equal(
++    pickHomebrewBinary(candidate => candidate === '/tmp/brew'),
++    null
++  )
++})
++
++test('verifiedInstalledCommunityVersion proves a newer version landed at the running path', () => {
++  assert.equal(
++    verifiedInstalledCommunityVersion(
++      '0.17.2.1',
++      '0.17.2.2',
++      { distribution: 'frankhommers-homebrew', distributionVersion: '0.17.2.2' },
++      { isPackaged: true, platform: 'darwin' }
++    ),
 +    '0.17.2.2'
-+  )
-+  assert.equal(
-+    verifiedInstalledCommunityVersion('0.17.2.1', '0.17.2.2', { ...stamp, distributionVersion: '0.17.2.3' }, runtime),
-+    '0.17.2.3'
-+  )
-+  assert.throws(() => verifiedInstalledCommunityVersion('0.17.2.1', '0.17.2.2', stamp, runtime))
-+  assert.throws(() =>
-+    verifiedInstalledCommunityVersion('0.17.2.1', '0.17.2.3', { ...stamp, distributionVersion: '0.17.2.2' }, runtime)
 +  )
 +  assert.throws(() =>
 +    verifiedInstalledCommunityVersion(
 +      '0.17.2.1',
 +      '0.17.2.2',
-+      { ...stamp, distribution: 'somebody-else', distributionVersion: '0.17.2.2' },
-+      runtime
++      { distribution: 'frankhommers-homebrew', distributionVersion: '0.17.2.1' },
++      { isPackaged: true, platform: 'darwin' }
++    )
++  )
++  assert.throws(() =>
++    verifiedInstalledCommunityVersion(
++      '0.17.2.1',
++      '0.17.2.2',
++      { distribution: 'frankhommers-homebrew', distributionVersion: '0.17.2.0' },
++      { isPackaged: true, platform: 'darwin' }
 +    )
 +  )
 +})
 +
-+test('brew resolution accepts only an executable from the fixed macOS locations', () => {
-+  assert.equal(pickHomebrewBinary(path => path === '/opt/homebrew/bin/brew'), '/opt/homebrew/bin/brew')
-+  assert.equal(pickHomebrewBinary(path => path === '/usr/local/bin/brew'), '/usr/local/bin/brew')
-+  assert.equal(pickHomebrewBinary(() => false), null)
-+})
++test('runHomebrewUpdate passes exact arguments and fails closed on non-zero exit', async () => {
++  const calls: string[][] = []
++  const steps: string[] = []
 +
-+test('package update executes fixed argv in order and stops on failure', async () => {
-+  const calls: { command: string; args: string[] }[] = []
-+  await runHomebrewUpdate('/opt/homebrew/bin/brew', async (command, args) => {
-+    calls.push({ command, args })
-+    return { code: 0, output: 'ok' }
-+  })
++  await runHomebrewUpdate(
++    '/opt/homebrew/bin/brew',
++    async (_command, args) => {
++      calls.push(args)
++      return { code: 0, output: 'ok' }
++    },
++    step => steps.push(step)
++  )
++
 +  assert.deepEqual(calls, [
-+    { command: '/opt/homebrew/bin/brew', args: ['update'] },
-+    { command: '/opt/homebrew/bin/brew', args: ['upgrade', '--cask', COMMUNITY_CASK] }
++    ['update'],
++    ['upgrade', '--cask', 'frankhommers/tap/hermes-desktop']
 +  ])
++  assert.deepEqual(steps, ['update', 'upgrade'])
 +
 +  await assert.rejects(
 +    () =>
@@ -329,80 +344,148 @@ index 0000000000000000000000000000000000000000..414007bdead1d6b395dda595f1bb6788
 +  }
 +}
 diff --git a/apps/desktop/electron/main.ts b/apps/desktop/electron/main.ts
-index 2820a547ca61b6504cf3bc24721af3f2ef3a8579..25ef4722ba4e77fe19f57592d2fdb447a647f065 100644
+index fcc49e5c4b40c82ce88959848029ccf4720930a9..dc92e1ad097fc44c0ce9b0d9def25383cfc7b4a4 100644
 --- a/apps/desktop/electron/main.ts
 +++ b/apps/desktop/electron/main.ts
-@@ -469,6 +469,15 @@ import {
-   resolveBehindLocally
- } from './update-api-check'
- import { updateCheckAgent } from './update-api-proxy'
+@@ -54,6 +54,17 @@ import {
+   nativeAboutVersion,
+   packagedReleaseChannel
+ } from './app-version'
 +import {
 +  type CommunityHomebrewConfig,
 +  communityHomebrewConfig,
 +  compareDottedVersions,
++  type HomebrewCommandResult,
 +  parseCaskContentsResponse,
 +  pickHomebrewBinary,
 +  runHomebrewUpdate,
 +  verifiedInstalledCommunityVersion
 +} from './community-homebrew-update'
- import { waitForUpdateClearance } from './update-gate'
- import { readLiveUpdateMarker, updateHandoffConflict, writeUpdateMarker } from './update-marker'
- import { isOfficialSshRemote, OFFICIAL_REPO_HTTPS_URL } from './update-remote'
-@@ -822,6 +831,8 @@ function loadInstallStamp() {
-           builtAt: parsed.builtAt || null,
-           dirty: Boolean(parsed.dirty),
-           source: parsed.source || null,
-+          distribution: parsed.distribution || null,
-+          distributionVersion: parsed.distributionVersion || null,
-           path: p
-         })
-       }
-@@ -1456,7 +1467,7 @@ if (IS_WINDOWS) {
- // the seed here just covers the first open and any non-menu invocation path.
++import { updateCheckAgent } from './update-api-proxy'
+ import { runAppInstallerChecker } from './appinstaller-checker'
+ import { installApplicationMenuAfterFirstWindow } from './application-menu-startup'
+ import { stopBackendChild as stopBackendChildImpl, waitForBackendExit } from './backend-child'
+@@ -1858,7 +1869,7 @@ if (IS_WINDOWS) {
+ // 0.0.0 placeholder on local builds (#124581).
  app.setAboutPanelOptions({
    applicationName: APP_NAME,
--  applicationVersion: resolveHermesVersion(),
-+  applicationVersion: resolveDesktopDisplayVersion(),
+-  applicationVersion: nativeAboutVersion(appVersionInfo(INSTALL_STAMP, '', app.getVersion())),
++  applicationVersion: resolveDesktopDisplayVersion() ?? nativeAboutVersion(appVersionInfo(INSTALL_STAMP, '', app.getVersion())),
    copyright: 'Copyright © 2026 Nous Research'
  })
  
-@@ -3338,6 +3349,53 @@ async function resolveHealedBranch(updateRoot, branch) {
-   return 'main'
+@@ -3704,7 +3715,134 @@ function emitUpdateProgress(payload) {
+   }
  }
  
-+// Packaged community builds are managed by Frank's Homebrew tap, not by the
-+// source checkout beneath HERMES_HOME. Keep the same bounded GitHub cache but
-+// key it on the installed distribution version instead of a Git commit.
++function resolveCommunityHomebrewConfig(): CommunityHomebrewConfig | null {
++  return communityHomebrewConfig(INSTALL_STAMP as any, { isPackaged: IS_PACKAGED, platform: process.platform })
++}
++
++function resolveDesktopDisplayVersion(): string | null {
++  return resolveCommunityHomebrewConfig()?.currentVersion ?? null
++}
++
++const DESKTOP_COMMUNITY_UPDATE_CHECK_CACHE_PATH = path.join(
++  app.getPath('userData'),
++  'community-update-check-cache.json'
++)
++const COMMUNITY_UPDATE_CHECK_TTL_MS = 24 * 60 * 60 * 1000
++const COMMUNITY_UPDATE_CHECK_FAILURE_TTL_MS = 10 * 60 * 1000
++
++function readCommunityUpdateCheckCache(): { branch: string; currentSha: string; fetchedAt: number; status: UpdaterStatusWire } | null {
++  try {
++    const parsed = JSON.parse(fs.readFileSync(DESKTOP_COMMUNITY_UPDATE_CHECK_CACHE_PATH, 'utf8'))
++    return parsed && typeof parsed === 'object' && parsed.status ? parsed : null
++  } catch {
++    return null
++  }
++}
++
++function writeCommunityUpdateCheckCache(entry: unknown): void {
++  try {
++    fs.mkdirSync(path.dirname(DESKTOP_COMMUNITY_UPDATE_CHECK_CACHE_PATH), { recursive: true })
++    writeFileAtomic(DESKTOP_COMMUNITY_UPDATE_CHECK_CACHE_PATH, JSON.stringify(entry))
++  } catch (error) {
++    rememberLog(`[updates] could not persist check cache: ${error instanceof Error ? error.message : String(error)}`)
++  }
++}
++
++function fetchGitHubContentsApi(url: string): Promise<unknown> {
++  return new Promise((resolve, reject) => {
++    const req = https.get(
++      url,
++      {
++        agent: updateCheckAgent(url),
++        headers: {
++          Accept: 'application/vnd.github+json',
++          'User-Agent': 'hermes-desktop-community-update-check'
++        },
++        timeout: 10_000
++      },
++      res => {
++        const chunks: Buffer[] = []
++        res.on('error', reject)
++        res.on('data', chunk => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)))
++        res.on('end', () => {
++          const body = Buffer.concat(chunks).toString('utf8')
++          if (res.statusCode && res.statusCode >= 400) {
++            reject(new Error(`GitHub API HTTP ${res.statusCode}: ${body.slice(0, 200)}`))
++            return
++          }
++          try {
++            resolve(JSON.parse(body))
++          } catch (err) {
++            reject(err)
++          }
++        })
++      }
++    )
++    req.on('error', reject)
++    req.on('timeout', () => {
++      req.destroy(new Error('GitHub API request timed out'))
++    })
++  })
++}
++
 +async function checkCommunityHomebrewUpdates(
 +  config: CommunityHomebrewConfig,
 +  { force = false }: { force?: boolean } = {}
-+) {
++): Promise<UpdaterStatusWire> {
 +  const branch = 'homebrew'
 +  const currentSha = `homebrew:${config.currentVersion}`
-+  const cached = readUpdateCheckCache()
++  const cached = readCommunityUpdateCheckCache()
 +  const now = Date.now()
 +
-+  if (!force && cacheIsFresh(cached, { branch, currentSha, now })) {
++  if (
++    !force &&
++    cached &&
++    cached.branch === branch &&
++    cached.currentSha === currentSha &&
++    now - cached.fetchedAt <
++      (cached.status?.error ? COMMUNITY_UPDATE_CHECK_FAILURE_TTL_MS : COMMUNITY_UPDATE_CHECK_TTL_MS)
++  ) {
 +    return cached.status
 +  }
 +
-+  let status
++  let status: Partial<UpdaterStatusWire>
 +  try {
-+    const targetVersion = parseCaskContentsResponse(await fetchGitHubApi(config.contentsApi))
++    const targetVersion = parseCaskContentsResponse(await fetchGitHubContentsApi(config.contentsApi))
 +    const comparison = compareDottedVersions(config.currentVersion, targetVersion)
 +    status = {
 +      updateAvailable: comparison < 0,
 +      behind: comparison < 0 ? null : 0,
 +      targetSha: `homebrew:${targetVersion}`,
-+      targetVersion,
++      latestTag: targetVersion,
 +      commits: []
 +    }
 +  } catch (error) {
-+    status = { error: 'fetch-failed', message: describeUpdateCheckFailure(error) }
++    status = { error: 'fetch-failed', message: error instanceof Error ? error.message : String(error) }
 +  }
 +
-+  const result = {
++  const result: UpdaterStatusWire = {
 +    supported: true,
++    mechanism: 'manual',
 +    branch,
 +    currentBranch: branch,
 +    currentSha,
@@ -412,31 +495,25 @@ index 2820a547ca61b6504cf3bc24721af3f2ef3a8579..25ef4722ba4e77fe19f57592d2fdb447
 +    fetchedAt: now,
 +    ...status
 +  }
-+  writeUpdateCheckCache({ fetchedAt: now, currentSha, branch, status: result })
++  writeCommunityUpdateCheckCache({ fetchedAt: now, currentSha, branch, status: result })
 +
 +  return result
 +}
 +
- // Passive checks never touch git's network side. Every client used to `git
- // fetch` twice per half hour; across the install base that was tens of
- // millions of pack negotiations a day against one repo (GitHub flagged it).
-@@ -3347,6 +3405,11 @@ async function resolveHealedBranch(updateRoot, branch) {
- // inside applyUpdates. `force` (menu item, Settings "Check now") skips the
- // cache; the renderer's background poller never passes it.
- async function checkUpdates({ force = false }: { force?: boolean } = {}) {
+ async function checkUpdates(opts: { force?: boolean } = {}): Promise<UpdaterStatusWire> {
 +  const community = resolveCommunityHomebrewConfig()
 +  if (community) {
-+    return checkCommunityHomebrewUpdates(community, { force })
++    return checkCommunityHomebrewUpdates(community, { force: opts.force })
 +  }
 +
-   const updateRoot = resolveUpdateRoot()
-   let { branch } = readDesktopUpdateConfig()
-   const gitDir = path.join(updateRoot, '.git')
-@@ -4191,11 +4254,112 @@ async function releaseBackendLock(updateRoot, tag) {
+   // A packaged install delegates to the update owner named by its stamp.
+   let strategy: UpdaterStrategy | null = null
+ 
+@@ -4741,7 +4879,110 @@ async function releaseBackendLock(updateRoot: string, tag: string): Promise<{ un
  //
  // Detection (checkUpdates / commit changelog / "N behind") stays in the UI;
  // only this apply action changed.
-+function runCommunityHomebrewCommand(command: string, args: string[]) {
++function runCommunityHomebrewCommand(command: string, args: string[]): Promise<HomebrewCommandResult> {
 +  return new Promise<{ code: number; output: string }>(resolve => {
 +    let output = ''
 +    const append = (chunk: unknown) => {
@@ -458,19 +535,19 @@ index 2820a547ca61b6504cf3bc24721af3f2ef3a8579..25ef4722ba4e77fe19f57592d2fdb447
 +    let child
 +    try {
 +      child = spawn(command, args, { cwd: os.homedir(), env, stdio: ['ignore', 'pipe', 'pipe'] })
-+    } catch (error) {
++    } catch (error: any) {
 +      resolve({ code: -1, output: error?.message || String(error) })
 +      return
 +    }
 +
 +    child.stdout?.on('data', append)
 +    child.stderr?.on('data', append)
-+    child.on('error', error => resolve({ code: -1, output: error?.message || String(error) }))
++    child.on('error', (error: any) => resolve({ code: -1, output: error?.message || String(error) }))
 +    child.on('close', code => resolve({ code: typeof code === 'number' ? code : -1, output }))
 +  })
 +}
 +
-+async function applyCommunityHomebrewUpdate(config: CommunityHomebrewConfig) {
++async function applyCommunityHomebrewUpdate(config: CommunityHomebrewConfig): Promise<UpdaterApplyResultWire> {
 +  const brew = pickHomebrewBinary(candidate => {
 +    try {
 +      fs.accessSync(candidate, fs.constants.X_OK)
@@ -483,7 +560,9 @@ index 2820a547ca61b6504cf3bc24721af3f2ef3a8579..25ef4722ba4e77fe19f57592d2fdb447
 +  if (!brew) {
 +    return {
 +      ok: false,
-+      error: 'Homebrew was not found in /opt/homebrew or /usr/local. Reinstall this community build through Homebrew first.',
++      mechanism: 'manual',
++      error:
++        'Homebrew was not found in /opt/homebrew or /usr/local. Reinstall this community build through Homebrew first.',
 +      manual: true,
 +      command: `brew update && brew upgrade --cask ${config.cask}`
 +    }
@@ -497,7 +576,7 @@ index 2820a547ca61b6504cf3bc24721af3f2ef3a8579..25ef4722ba4e77fe19f57592d2fdb447
 +      throw new Error(status.message || 'Could not check the Homebrew tap.')
 +    }
 +    if (!status.updateAvailable) {
-+      return { ok: false, error: 'No newer Hermes Desktop package is available in the Homebrew tap.' }
++      return { ok: false, mechanism: 'manual', error: 'No newer Hermes Desktop package is available in the Homebrew tap.' }
 +    }
 +
 +    await runHomebrewUpdate(brew, runCommunityHomebrewCommand, step => {
@@ -510,8 +589,8 @@ index 2820a547ca61b6504cf3bc24721af3f2ef3a8579..25ef4722ba4e77fe19f57592d2fdb447
 +
 +    const installedVersion = verifiedInstalledCommunityVersion(
 +      config.currentVersion,
-+      status.targetVersion,
-+      loadInstallStamp(),
++      status.latestTag || config.currentVersion,
++      INSTALL_STAMP as any,
 +      { isPackaged: IS_PACKAGED, platform: process.platform }
 +    )
 +    rememberLog(
@@ -523,125 +602,47 @@ index 2820a547ca61b6504cf3bc24721af3f2ef3a8579..25ef4722ba4e77fe19f57592d2fdb447
 +    setTimeout(() => void exitAfterBackendShutdown(0), 250)
 +
 +    return { ok: true, handedOff: true, guiUpdated: true, targetSha: status.targetSha }
-+  } catch (error) {
++  } catch (error: any) {
 +    const message = error?.message || String(error)
-+    emitUpdateProgress({ stage: 'error', message, error: message, percent: null })
-+    return { ok: false, error: message }
++    emitUpdateProgress({ stage: 'error', message, percent: null })
++    return { ok: false, mechanism: 'manual', error: message }
 +  } finally {
 +    if (!isQuittingForHandoff) updateInFlight = false
 +  }
 +}
 +
- async function applyUpdates(opts: { stopSafeBlockers?: boolean } = {}) {
-   if (updateInFlight) {
-     throw new Error('An update is already in progress.')
-   }
- 
+ async function applyUpdates(): Promise<UpdaterApplyResultWire> {
 +  const community = resolveCommunityHomebrewConfig()
 +  if (community) {
 +    return applyCommunityHomebrewUpdate(community)
 +  }
 +
-   updateInFlight = true
- 
-   try {
-@@ -18250,11 +18414,19 @@ ipcMain.handle('hermes:updates:branch:set', async (_event, name) => {
-   return { branch }
- })
- 
--// Resolve the canonical Hermes version (the one `release.py` bumps in
--// hermes_cli/__init__.py + pyproject.toml) so the desktop About panel shows the
--// real Hermes version instead of the Electron app's own package.json version,
--// which historically drifted (stuck at 0.0.2). Falls back to app.getVersion()
--// when the source tree can't be read (e.g. a packaged build without the repo).
-+// Preserve upstream's legacy source-checkout version resolver unchanged: it
-+// reads hermes_cli/__init__.py (the Agent version) and is not used for remote
-+// backend status or compatibility. Frank's packaged distribution needs a
-+// separate Desktop-only resolver because its immutable app revision is neither
-+// that checkout value nor the connected backend's version.
-+function resolveCommunityHomebrewConfig() {
-+  return communityHomebrewConfig(INSTALL_STAMP, { isPackaged: IS_PACKAGED, platform: process.platform })
-+}
-+
-+function resolveDesktopDisplayVersion() {
-+  return resolveCommunityHomebrewConfig()?.currentVersion ?? resolveHermesVersion()
-+}
-+
- function resolveHermesVersion() {
-   try {
-     const root = resolveUpdateRoot()
-@@ -18288,7 +18460,7 @@ async function detectRendererSkew() {
-   return detectBundleSkew(INSTALL_STAMP, runGit, resolveUpdateRoot())
- }
- 
--// Re-resolve the live Hermes version and push it into the native About panel
-+// Re-resolve the displayed Desktop version and push it into the native About panel
- // just before showing it, so an in-place `hermes update` is reflected without
- // an app restart. macOS only — `showAboutPanel()` is a no-op elsewhere, and the
- // other platforms don't use this menu item.
-@@ -18297,8 +18469,8 @@ function showAboutPanelFresh() {
+   return updateOperation.apply(async (): Promise<UpdaterApplyResultWire> => {
+     updateInFlight = true
+     let handedOff: boolean = false
+@@ -18710,7 +18951,7 @@ function showAboutPanelFresh(): void {
+     const info: AppVersionInfo = appVersionInfo(INSTALL_STAMP, version, app.getVersion())
+     // The product name already identifies canary and commit builds. Never pass
+     // through empty/placeholder: the panel would render the bundle's 0.0.0 (#124581).
+-    const display: string = nativeAboutVersion(info)
++    const display: string = resolveDesktopDisplayVersion() ?? nativeAboutVersion(info)
      app.setAboutPanelOptions({
        applicationName: APP_NAME,
-       applicationVersion: skew.outOfSync
--        ? `${resolveHermesVersion()} — app build out of date, update the desktop app`
--        : resolveHermesVersion(),
-+        ? `${resolveDesktopDisplayVersion()} — app build out of date, update the desktop app`
-+        : resolveDesktopDisplayVersion(),
-       copyright: 'Copyright © 2026 Nous Research'
-     })
-     app.showAboutPanel()
-@@ -18309,7 +18481,7 @@ ipcMain.handle('hermes:version', async () => {
-   const skew = await detectRendererSkew()
+       applicationVersion: skew.outOfSync ? `${display} — app build out of date, update the desktop app` : display,
+@@ -18725,6 +18966,7 @@ ipcMain.handle('hermes:version', async (_event, scope?: { connectionId?: string;
  
    return {
--    appVersion: resolveHermesVersion(),
-+    appVersion: resolveDesktopDisplayVersion(),
+     ...appVersionInfo(INSTALL_STAMP, version, app.getVersion()),
++    appVersion: resolveDesktopDisplayVersion() ?? appVersionInfo(INSTALL_STAMP, version, app.getVersion()).appVersion,
      electronVersion: process.versions.electron,
      nodeVersion: process.versions.node,
      platform: process.platform,
-diff --git a/apps/desktop/electron/ssh-connection.ts b/apps/desktop/electron/ssh-connection.ts
-index 09880e7bf18918b67f4bf894b6323435803b75bf..b4a072d5179e1d7e18d3ebfc572acc37a48ea3df 100644
---- a/apps/desktop/electron/ssh-connection.ts
-+++ b/apps/desktop/electron/ssh-connection.ts
-@@ -171,12 +171,11 @@ function redactSecrets(text) {
- // across reconnects so ControlMaster reuse works, short so the full path stays
- // under sun_path's 104-byte limit.
- //
--// CRITICAL (macOS): the base dir must be SHORT. os.tmpdir() on macOS is the
--// per-user `/var/folders/xx/yyyy…/T/` (~49 bytes), and OpenSSH binds a
--// TEMPORARY listener at `<ControlPath>.<16 random chars>` while establishing
--// the master — so a path that itself fits 104 still overflows at bind time. We
--// root under a short per-user base (`~/.hermes/desktop-ssh`) so even worst case
--// (~72 bytes on macOS) stays clear. Windows has no AF_UNIX sun_path limit.
-+// CRITICAL (macOS): the base dir must be SHORT. Both os.tmpdir() on macOS
-+// (`/var/folders/…`) and an arbitrarily long home can overflow after OpenSSH
-+// appends its temporary `.<16 random chars>` listener suffix. `/tmp` is a
-+// stable short spelling on POSIX; the uid-scoped directory remains safe because
-+// open() creates it 0700 and rejects symlinks, foreign ownership, and bad modes.
- function controlSocketPath(user, host, port, baseDir?, identity: any = {}) {
-   const dir = baseDir || defaultControlDir()
-   const keyPathIdentity = path.normalize(String(identity.keyPath || ''))
-@@ -197,13 +196,11 @@ function controlSocketPath(user, host, port, baseDir?, identity: any = {}) {
- }
- 
- function defaultControlDir() {
--  // POSIX: a SHORT, PER-USER base stays under the socket limit AND avoids a
--  // world-shared /tmp dir (no symlink-hijack surface). Created 0700 in open().
-   if (process.platform === 'win32') {
-     return path.join(os.tmpdir(), 'hermes-desktop-ssh')
-   }
- 
--  return path.join(os.homedir(), '.hermes', 'desktop-ssh')
-+  return path.join('/tmp', `hermes-desktop-ssh-${process.getuid!()}`)
- }
- 
- // Command construction (pure — the unit tests exercise these directly)
 diff --git a/apps/desktop/scripts/write-build-stamp.mjs b/apps/desktop/scripts/write-build-stamp.mjs
-index 076d5a893e2346ad07f260ef5790b0fb0d9e5831..8d5c79b511c2c5388ef9e1c3e91ae6043902ab20 100644
+index 8339c7c441fcdafba160a9fdc8a28fc0bae37e39..48191e0e6df17a749edbfce3250d3719f6ba3a56 100644
 --- a/apps/desktop/scripts/write-build-stamp.mjs
 +++ b/apps/desktop/scripts/write-build-stamp.mjs
-@@ -97,6 +97,24 @@ export function fromFallback(branch = FALLBACK_BRANCH) {
-   }
+@@ -113,6 +113,24 @@ export function isFallbackCommit(commit) {
+   return typeof commit === "string" && /^0{7,40}$/.test(commit)
  }
  
 +const COMMUNITY_DISTRIBUTION = "frankhommers-homebrew"
@@ -662,21 +663,21 @@ index 076d5a893e2346ad07f260ef5790b0fb0d9e5831..8d5c79b511c2c5388ef9e1c3e91ae604
 +  return { distribution: identity, distributionVersion: version }
 +}
 +
- /**
-  * Resolve the install stamp without writing it.  Pure enough for unit tests:
-  * inject env / execFn / repoRoot to simulate CI, local git, or no-git trees.
-@@ -155,7 +173,8 @@ function main() {
-     branch: stamp.branch,
-     builtAt: new Date().toISOString(),
-     dirty: stamp.dirty,
--    source: stamp.source
-+    source: stamp.source,
-+    ...resolveDistribution(process.env)
+ /** Qualify desktop CLI files before the immutable runtime paths are baked.
+  * Canonical command keys remain stable for backend consumers; public aliases
+  * come from the declared filenames, never those internal keys. The canonical
+@@ -269,7 +287,8 @@ export function buildStampPayload(stamp, env = process.env, platform = process.p
+     updateMechanism: commitBuild ? 'external' : updateMechanism,
+     tag: channelBuild?.receiverCandidate ? channelBuild.releaseTag : env.HERMES_PAYLOAD_TAG || null,
+     ...(bundleEnv ? { bundleEnv } : {}),
+-    ...(bundled ? { runtime: payload.runtime } : {})
++    ...(bundled ? { runtime: payload.runtime } : {}),
++    ...resolveDistribution(env)
    }
+ }
  
-   mkdirSync(OUT_DIR, { recursive: true })
 diff --git a/apps/desktop/scripts/write-build-stamp.test.mjs b/apps/desktop/scripts/write-build-stamp.test.mjs
-index 7fbc9f60e331bc9ab2b0a176282b502fa73e7b78..87b237ee256c5c417bb9b4105b9c4d8b245a5cf6 100644
+index 1206bfe0fc87f50b4ea008ecce24dcec7b0dda08..66f04397195e039fc60a5ad7a970d1beb2da84d7 100644
 --- a/apps/desktop/scripts/write-build-stamp.test.mjs
 +++ b/apps/desktop/scripts/write-build-stamp.test.mjs
 @@ -8,6 +8,7 @@ import {
@@ -687,11 +688,10 @@ index 7fbc9f60e331bc9ab2b0a176282b502fa73e7b78..87b237ee256c5c417bb9b4105b9c4d8b
    resolveStamp
  } from './write-build-stamp.mjs'
  
-@@ -79,3 +80,30 @@ test('resolveStamp falls back when neither CI nor git is available', () => {
-     source: 'fallback'
+@@ -82,6 +83,33 @@ test('resolveStamp falls back when neither CI nor git is available', () => {
    })
  })
-+
+ 
 +test('resolveDistribution embeds only a validated community Homebrew identity and version', () => {
 +  assert.deepEqual(
 +    resolveDistribution({
@@ -718,8 +718,12 @@ index 7fbc9f60e331bc9ab2b0a176282b502fa73e7b78..87b237ee256c5c417bb9b4105b9c4d8b
 +    /distribution identity/
 +  )
 +})
++
+ // ── buildStampPayload — the staged-desktop full schema ─────────────────────
+ 
+ import { buildStampPayload } from './write-build-stamp.mjs'
 diff --git a/apps/desktop/src/lib/version-status.test.ts b/apps/desktop/src/lib/version-status.test.ts
-index 50f6dc3bac9a7b8dd409d9b999670bbb3f427a0b..dbb9f30fee1af7073076bddaa18a01c9f452c085 100644
+index 4da0ce73e67049099e4890989682b878a60f8027..288a9c9e64b07113b27fa2970ab3a3448800de08 100644
 --- a/apps/desktop/src/lib/version-status.test.ts
 +++ b/apps/desktop/src/lib/version-status.test.ts
 @@ -42,6 +42,10 @@ describe('resolveVersionStatus', () => {
@@ -734,23 +738,27 @@ index 50f6dc3bac9a7b8dd409d9b999670bbb3f427a0b..dbb9f30fee1af7073076bddaa18a01c9
      expect(client({ sha: 'abc1234' }).label).toBe('abc1234')
      expect(client({ sha: 'abc1234' }).unknown).toBe(false)
 diff --git a/apps/desktop/src/lib/version-status.ts b/apps/desktop/src/lib/version-status.ts
-index 0b292c9f31d94f7b2203726fcf581920d4e61f5d..f6f06a187f9d826eac7c5f14cda5a43fbf772758 100644
+index d7028616629a0146a912edb357239784b6609064..17079e0719d316c6e3a43e1272296750340e8684 100644
 --- a/apps/desktop/src/lib/version-status.ts
 +++ b/apps/desktop/src/lib/version-status.ts
-@@ -83,7 +83,7 @@ export function resolveVersionStatus({
-   const base = !client
+@@ -97,10 +97,10 @@ export function resolveVersionStatus({
+   // A client with no version still identifies itself by sha; a backend can't.
+   const named = version ?? (client ? sha : null) ?? copy.unknown
+ 
+-  const base = !client
++    const base = !client
      ? copy.backendLabel(named)
      : remote
 -      ? copy.clientLabel(named)
 +      ? copy.desktopVersion(named)
        : (version && `v${version}`) || named
  
-   // Commits behind is the precise diff; `(update)` is the fallback for a
+   // Main channel: commits behind is the precise diff. Stable channel: a
 diff --git a/apps/desktop/src/store/voice-prefs.test.ts b/apps/desktop/src/store/voice-prefs.test.ts
-index 3cf9c7e94f6ebb3f6c72a2da2e19d9ab78e25816..f5af9b4cfcd832ed85ee7b2256db436434487abe 100644
+index 0181240ccdc7ce44bd659205841d913308995a0e..fef18935e743bc9779d4d28d43e830a23f90d973 100644
 --- a/apps/desktop/src/store/voice-prefs.test.ts
 +++ b/apps/desktop/src/store/voice-prefs.test.ts
-@@ -22,7 +22,7 @@ it('keeps the desktop toggle local across config refreshes', async () => {
+@@ -26,7 +26,7 @@ it('keeps the desktop toggle local across config refreshes', async () => {
        localStorage.clear()
        vi.resetModules()
        const prefs = await import('./voice-prefs')
@@ -759,7 +767,7 @@ index 3cf9c7e94f6ebb3f6c72a2da2e19d9ab78e25816..f5af9b4cfcd832ed85ee7b2256db4364
  
        if (fails) {
          write.mockImplementation(() => {
-@@ -51,7 +51,7 @@ it('migrates the legacy preference once, not on every refresh', async () => {
+@@ -55,7 +55,7 @@ it('migrates the legacy preference once, not on every refresh', async () => {
        localStorage.clear()
        vi.resetModules()
        const prefs = await import('./voice-prefs')

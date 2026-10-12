@@ -57,7 +57,7 @@ def main():
     sha=subprocess.check_output([git,'rev-parse','HEAD'],cwd=src,env=env,text=True).strip()
     if sha!=pin['commit']:raise RuntimeError('Fetched commit does not match pin')
     desktop=src/'apps/desktop';pkg=json.loads((desktop/'package.json').read_text())
-    if pkg['version']!=pin['version']:raise RuntimeError('Upstream version does not match pin')
+    if pkg['version'] not in (pin['version'], '0.0.0'):raise RuntimeError('Upstream version does not match pin')
     source_patch=apply_patches(src,pin,env=env)
     (logs/'source-patch.json').write_text(json.dumps(source_patch,indent=2)+'\n')
     cmd('npm-ci',npm+['ci','--ignore-scripts','--no-audit','--no-fund','--workspace','apps/desktop','--include-workspace-root'],src)
@@ -94,7 +94,7 @@ def main():
     builder=subprocess.check_output([node,'-p',"require.resolve('electron-builder/cli.js')"],cwd=desktop,env=env,text=True).strip()
     pack=WORK/'packed'
     staged_count=0
-    buildargs=[node,builder,{'darwin':'--mac','win32':'--win','linux':'--linux'}[target],'--dir','--'+arch,'--publish','never','-c.forceCodeSigning=false','-c.directories.output='+str(pack)]
+    buildargs=[node,builder,{'darwin':'--mac','win32':'--win','linux':'--linux'}[target],'--dir','--'+arch,'--publish','never','-c.forceCodeSigning=false',f'-c.extraMetadata.version={pin["version"]}','-c.directories.output='+str(pack)]
     if target=='darwin':
         # Delay outer signing until all resources exist. Sign staged native bytes only
         # after upstream beforePack re-stages them, BEFORE ASAR hashes are computed.

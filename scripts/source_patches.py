@@ -19,22 +19,12 @@ HOMEBREW_UPDATER_PATHS = frozenset({
     'apps/desktop/electron/community-homebrew-update.test.ts',
     'apps/desktop/electron/community-homebrew-update.ts',
     'apps/desktop/electron/main.ts',
-    'apps/desktop/electron/ssh-connection.ts',
     'apps/desktop/scripts/write-build-stamp.mjs',
     'apps/desktop/scripts/write-build-stamp.test.mjs',
     'apps/desktop/src/lib/version-status.test.ts',
     'apps/desktop/src/lib/version-status.ts',
     'apps/desktop/src/store/voice-prefs.test.ts',
 })
-
-# Temporary fix for an official source defect that breaks typecheck: the
-# onboarding card imports undeclared lucide-react. Remove once upstream
-# declares the dependency or switches to the declared Tabler icon set.
-UPSTREAM_BUILD_FIX_PATCH = 'upstream-build-fix.patch'
-UPSTREAM_BUILD_FIX_PATHS = frozenset({
-    'apps/desktop/src/components/onboarding-chat/cards/setup.tsx',
-})
-
 
 def _patch_path_is_approved(patch_name, source_path):
     if not isinstance(source_path, str) or '..' in source_path.split('/'):
@@ -43,8 +33,6 @@ def _patch_path_is_approved(patch_name, source_path):
         return REMOTE_UI_PATH_RE.fullmatch(source_path) is not None
     if patch_name == HOMEBREW_UPDATER_PATCH:
         return source_path in HOMEBREW_UPDATER_PATHS
-    if patch_name == UPSTREAM_BUILD_FIX_PATCH:
-        return source_path in UPSTREAM_BUILD_FIX_PATHS
     return False
 
 

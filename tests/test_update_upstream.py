@@ -74,6 +74,14 @@ class PlanTests(unittest.TestCase):
         candidate, _ = self.plan(FixtureAPI(version='0.18.0'))
         self.assertEqual((candidate['version'], candidate['revision']), ('0.18.0', 1))
 
+    def test_placeholder_package_version_uses_release_tag(self):
+        api = FixtureAPI(version='0.0.0')
+        api.data[f'repos/{u.UPSTREAM}/releases/latest'] = dict(RELEASE, tag_name='v0.21.6')
+        api.data[f'repos/{u.UPSTREAM}/git/ref/tags/v0.21.6'] = {
+            'ref': 'refs/tags/v0.21.6', 'object': {'type': 'tag', 'sha': TAG}}
+        candidate, _ = self.plan(api)
+        self.assertEqual((candidate['version'], candidate['revision']), ('0.21.6', 1))
+
     def test_numeric_comparison_not_lexicographic(self):
         candidate, _ = self.plan(FixtureAPI(version='0.100.0'))
         self.assertEqual(candidate['revision'], 1)

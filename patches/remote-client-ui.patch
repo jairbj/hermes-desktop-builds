@@ -52,19 +52,19 @@ index 0000000000000000000000000000000000000000..de835b161b10137d93a986bc28fb6e1b
 +  })
 +})
 diff --git a/apps/desktop/src/app/chat/sidebar/fleet-rail.ts b/apps/desktop/src/app/chat/sidebar/fleet-rail.ts
-index ac4b80d043e09c7b7f260b3bb34443ded8faa335..52a66e746c39a8e66efb280a079e4804cfd5faf9 100644
+index 10de23cfa643698379751de5abbe00e4cb8c5fc8..7f9529e4e0511dcf1ccb9c6cb29265bb5c755d6a 100644
 --- a/apps/desktop/src/app/chat/sidebar/fleet-rail.ts
 +++ b/apps/desktop/src/app/chat/sidebar/fleet-rail.ts
-@@ -68,6 +68,15 @@ export function buildRestGroups({
+@@ -70,6 +70,15 @@ export function buildRestGroups({
      const source = roster?.sources.find(candidate => candidate.connectionId === connection.id)
      const rows = roster?.agents.filter(agent => agent.connectionId === connection.id) ?? []
  
-+    if (
-+      connection.kind === 'local' &&
-+      connections.some(candidate => candidate.id === activeConnectionId && candidate.kind !== 'local') &&
-+      source?.error === 'connect-on-demand' &&
-+      rows.length === 0
-+    ) {
++    // Community builds defer local setup when an active remote gateway is
++    // running. An empty local source with connect-on-demand latency would otherwise
++    // pin an inert "This device" bucket into the sidebar even though all chat
++    // traffic is served by the remote machine.
++    if (connection.id === 'local' && activeConnectionId && rows.length === 0
++        && (!source || source.error === 'connect-on-demand')) {
 +      continue
 +    }
 +
@@ -72,10 +72,10 @@ index ac4b80d043e09c7b7f260b3bb34443ded8faa335..52a66e746c39a8e66efb280a079e4804
        continue
      }
 diff --git a/apps/desktop/src/app/chat/sidebar/profile-rail-fleet.test.tsx b/apps/desktop/src/app/chat/sidebar/profile-rail-fleet.test.tsx
-index 5f5a9bb7660243eefd3c1a88834c8a7be7840075..f9f7b639ba34c0932fd62c1e4eaf95f43813ee1d 100644
+index 4cc5a45b19f32bb78e3ea486f224ca21947593eb..d83d31856f33251ee40b28697b6b4881410a9260 100644
 --- a/apps/desktop/src/app/chat/sidebar/profile-rail-fleet.test.tsx
 +++ b/apps/desktop/src/app/chat/sidebar/profile-rail-fleet.test.tsx
-@@ -227,6 +227,39 @@ afterEach(() => {
+@@ -341,6 +341,39 @@ describe('ProfileRail overflow', () => {
  })
  
  describe('ProfileRail fleet mode', () => {
@@ -116,19 +116,10 @@ index 5f5a9bb7660243eefd3c1a88834c8a7be7840075..f9f7b639ba34c0932fd62c1e4eaf95f4
      'keeps right-click launch routes exact without selecting a profile (condensed=%s)',
      async condensed => {
 diff --git a/apps/desktop/src/components/desktop-install-overlay.test.tsx b/apps/desktop/src/components/desktop-install-overlay.test.tsx
-index 7351280894c9dda3f636eb91f4a968972b548c84..6a0e698f7b236867d36256ae48aede70c19c084a 100644
+index db67e72b6a28e7d837215eb36fbad95cfd82eef7..2f0eaee8ad054ddb707bdf4ab3c4f332d2abec48 100644
 --- a/apps/desktop/src/components/desktop-install-overlay.test.tsx
 +++ b/apps/desktop/src/components/desktop-install-overlay.test.tsx
-@@ -32,6 +32,8 @@ function installDesktopMock(state: DesktopBootstrapState) {
-       return () => bootstrapListeners.delete(listener)
-     }),
-     continueBootstrapLocal: vi.fn().mockResolvedValue({ ok: true }),
-+    cancelBootstrap: vi.fn().mockResolvedValue({ ok: true }),
-+    resetBootstrap: vi.fn(),
-     probeConnectionConfig: vi.fn(),
-     testConnectionConfig: vi.fn(),
-     applyConnectionConfig: vi.fn(),
-@@ -52,33 +54,6 @@ function installDesktopMock(state: DesktopBootstrapState) {
+@@ -54,33 +54,6 @@ function installDesktopMock(state: DesktopBootstrapState) {
    return desktop
  }
  
@@ -162,21 +153,54 @@ index 7351280894c9dda3f636eb91f4a968972b548c84..6a0e698f7b236867d36256ae48aede70
  beforeEach(() => {
    vi.restoreAllMocks()
  })
-@@ -90,113 +65,52 @@ afterEach(() => {
+@@ -92,171 +65,52 @@ afterEach(() => {
  })
  
  describe('DesktopInstallOverlay first-run setup', () => {
--  it('continues local bootstrap only when Install Hermes locally is selected', async () => {
-+  it.each(['win32', 'darwin', 'linux'])('opens the remote form directly on %s without local-install offers', async platform => {
-     const desktop = installDesktopMock(
+-  it('shows the remote/local choice without installer progress', async () => {
+-    installDesktopMock(
 -      bootstrapState({
--        setupChoice: { platform: 'win32', activeRoot: 'C:\\Users\\me\\AppData\\Local\\hermes\\hermes-agent' }
+-        setupChoice: {
+-          platform: 'win32',
+-          activeRoot: 'C:\\Users\\me\\AppData\\Local\\hermes\\hermes-agent',
+-          local: 'none',
+-          bundled: false
+-        }
 -      })
++  it.each(['win32', 'darwin', 'linux'])('opens the remote form directly on %s without local-install offers', async platform => {
++    const desktop = installDesktopMock(
 +      bootstrapState({ setupChoice: { platform, activeRoot: '/test/hermes-agent' } })
      )
 -
      render(<DesktopInstallOverlay />)
  
+-    expect(await screen.findByText('Set up Hermes Desktop')).toBeTruthy()
+-    expect(screen.getByText('Connect to existing Hermes')).toBeTruthy()
+-    expect(screen.getByText('Install Hermes locally')).toBeTruthy()
+-    expect(screen.getByText(/Will install to/i)).toBeTruthy()
++    expect(await screen.findByText('Gateway URL')).toBeTruthy()
++    expect(screen.getByText('Test connection')).toBeTruthy()
++    expect(screen.getByText('Apply and reconnect')).toBeTruthy()
++    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull()
++    expect(screen.queryByText('Install Hermes locally')).toBeNull()
+     expect(screen.queryByText(/steps complete/i)).toBeNull()
+     expect(screen.queryByText(/Fetching installer manifest/i)).toBeNull()
+-  })
+-
+-  it('continues local bootstrap only when Install Hermes locally is selected', async () => {
+-    const desktop = installDesktopMock(
+-      bootstrapState({
+-        setupChoice: {
+-          platform: 'win32',
+-          activeRoot: 'C:\\Users\\me\\AppData\\Local\\hermes\\hermes-agent',
+-          local: 'none',
+-          bundled: false
+-        }
+-      })
+-    )
+-
+-    render(<DesktopInstallOverlay />)
+-
 -    fireEvent.click(await screen.findByText('Install Hermes locally'))
 -
 -    expect(desktop.continueBootstrapLocal).toHaveBeenCalledTimes(1)
@@ -193,7 +217,12 @@ index 7351280894c9dda3f636eb91f4a968972b548c84..6a0e698f7b236867d36256ae48aede70
 -  it('surfaces a recoverable error when the local-bootstrap bridge is unavailable', async () => {
 -    const desktop = installDesktopMock(
 -      bootstrapState({
--        setupChoice: { platform: 'win32', activeRoot: 'C:\\Users\\me\\AppData\\Local\\hermes\\hermes-agent' }
+-        setupChoice: {
+-          platform: 'win32',
+-          activeRoot: 'C:\\Users\\me\\AppData\\Local\\hermes\\hermes-agent',
+-          local: 'none',
+-          bundled: false
+-        }
 -      })
 -    )
 -
@@ -212,7 +241,12 @@ index 7351280894c9dda3f636eb91f4a968972b548c84..6a0e698f7b236867d36256ae48aede70
 -  it('keeps the local-start error when the first snapshot commits under the click', async () => {
 -    const desktop = installDesktopMock(
 -      bootstrapState({
--        setupChoice: { platform: 'win32', activeRoot: 'C:\\Users\\me\\AppData\\Local\\hermes\\hermes-agent' }
+-        setupChoice: {
+-          platform: 'win32',
+-          activeRoot: 'C:\\Users\\me\\AppData\\Local\\hermes\\hermes-agent',
+-          local: 'none',
+-          bundled: false
+-        }
 -      })
 -    )
 -
@@ -224,21 +258,13 @@ index 7351280894c9dda3f636eb91f4a968972b548c84..6a0e698f7b236867d36256ae48aede70
 -    // window by accident; observing the DOM directly hits it every time.
 -    const install = (await whenPresent('Install Hermes locally')).closest('button') as HTMLButtonElement
 -    fireEvent.click(install)
--
++    expect(desktop.continueBootstrapLocal).not.toHaveBeenCalled()
+ 
 -    await act(async () => {
 -      await Promise.resolve()
 -    })
 -
 -    expect(screen.queryByText('Local installation could not start. Restart Hermes Desktop and try again.')).toBeTruthy()
-+    expect(await screen.findByText('Gateway URL')).toBeTruthy()
-+    expect(screen.getByText('Test connection')).toBeTruthy()
-+    expect(screen.getByText('Apply and reconnect')).toBeTruthy()
-+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull()
-+    expect(screen.queryByText('Install Hermes locally')).toBeNull()
-+    expect(screen.queryByText(/steps complete/i)).toBeNull()
-+    expect(screen.queryByText(/Fetching installer manifest/i)).toBeNull()
-+    expect(desktop.continueBootstrapLocal).not.toHaveBeenCalled()
-+
 +    act(() => desktop.emitBootstrapEvent({ type: 'dismissed' }))
 +    expect(screen.queryByText('Gateway URL')).toBeNull()
    })
@@ -246,7 +272,12 @@ index 7351280894c9dda3f636eb91f4a968972b548c84..6a0e698f7b236867d36256ae48aede70
 -  it('clears a stale local-start error when a repair presents a different root', async () => {
 -    const desktop = installDesktopMock(
 -      bootstrapState({
--        setupChoice: { platform: 'win32', activeRoot: 'C:\\Users\\me\\AppData\\Local\\hermes\\hermes-agent' }
+-        setupChoice: {
+-          platform: 'win32',
+-          activeRoot: 'C:\\Users\\me\\AppData\\Local\\hermes\\hermes-agent',
+-          local: 'none',
+-          bundled: false
+-        }
 -      })
 -    )
 -
@@ -280,16 +311,17 @@ index 7351280894c9dda3f636eb91f4a968972b548c84..6a0e698f7b236867d36256ae48aede70
 -    expect(screen.queryByText('Local installation could not start. Restart Hermes Desktop and try again.')).toBeNull()
 -  })
 -
--  it('returns from the remote connection form to the first-run choice', async () => {
+-  it('opens the remote connection form from the first-run choice', async () => {
 -    installDesktopMock(
 -      bootstrapState({
--        setupChoice: { platform: 'linux', activeRoot: '/home/me/.hermes/hermes-agent' }
+-        setupChoice: { platform: 'linux', activeRoot: '/home/me/.hermes/hermes-agent', local: 'none', bundled: false }
 -      })
 -    )
 -
 -    render(<DesktopInstallOverlay />)
 -
 -    fireEvent.click(await screen.findByText('Connect to existing Hermes'))
+-
 +      desktop.emitBootstrapEvent({ type: 'unsupported-platform', platform: 'linux', activeRoot: '/test',
 +        installCommand: 'DO NOT RUN', docsUrl: 'https://example.invalid' })
 +      desktop.emitBootstrapEvent({ type: 'failed', error: 'local permission denied' })
@@ -299,6 +331,21 @@ index 7351280894c9dda3f636eb91f4a968972b548c84..6a0e698f7b236867d36256ae48aede70
 +    expect(screen.queryByRole('button', { name: 'Reload and retry' })).toBeNull()
 +    fireEvent.click(screen.getByRole('button', { name: 'Connect existing' }))
      expect(await screen.findByText('Gateway URL')).toBeTruthy()
+-    expect(screen.getByText('Test connection')).toBeTruthy()
+-    expect(screen.getByText('Apply and reconnect')).toBeTruthy()
+-  })
+-
+-  it('returns from the remote connection form to the first-run choice', async () => {
+-    installDesktopMock(
+-      bootstrapState({
+-        setupChoice: { platform: 'linux', activeRoot: '/home/me/.hermes/hermes-agent', local: 'none', bundled: false }
+-      })
+-    )
+-
+-    render(<DesktopInstallOverlay />)
+-
+-    fireEvent.click(await screen.findByText('Connect to existing Hermes'))
+-    expect(await screen.findByText('Gateway URL')).toBeTruthy()
 -
 -    fireEvent.click(screen.getByText('Back'))
 -
@@ -311,7 +358,7 @@ index 7351280894c9dda3f636eb91f4a968972b548c84..6a0e698f7b236867d36256ae48aede70
    })
  
    it('requires a successful token connection test before applying remote config', async () => {
-@@ -227,7 +141,6 @@ describe('DesktopInstallOverlay first-run setup', () => {
+@@ -287,7 +141,6 @@ describe('DesktopInstallOverlay first-run setup', () => {
  
      render(<DesktopInstallOverlay />)
  
@@ -319,15 +366,7 @@ index 7351280894c9dda3f636eb91f4a968972b548c84..6a0e698f7b236867d36256ae48aede70
      fireEvent.change(await screen.findByPlaceholderText('https://gateway.example.com/hermes'), {
        target: { value: 'https://gateway.example.com/hermes' }
      })
-@@ -286,7 +199,6 @@ describe('DesktopInstallOverlay first-run setup', () => {
- 
-     render(<DesktopInstallOverlay />)
- 
--    fireEvent.click(await screen.findByText('Connect to existing Hermes'))
-     const urlInput = await screen.findByPlaceholderText('https://gateway.example.com/hermes')
-     fireEvent.change(urlInput, { target: { value: 'https://gateway.example.com/hermes' } })
- 
-@@ -339,7 +251,6 @@ describe('DesktopInstallOverlay first-run setup', () => {
+@@ -353,7 +206,6 @@ describe('DesktopInstallOverlay first-run setup', () => {
  
      render(<DesktopInstallOverlay />)
  
@@ -335,7 +374,7 @@ index 7351280894c9dda3f636eb91f4a968972b548c84..6a0e698f7b236867d36256ae48aede70
      fireEvent.change(await screen.findByPlaceholderText('https://gateway.example.com/hermes'), {
        target: { value: 'https://gateway.example.com/hermes' }
      })
-@@ -390,7 +301,6 @@ describe('DesktopInstallOverlay first-run setup', () => {
+@@ -405,7 +257,6 @@ describe('DesktopInstallOverlay first-run setup', () => {
  
      render(<DesktopInstallOverlay />)
  
@@ -343,15 +382,28 @@ index 7351280894c9dda3f636eb91f4a968972b548c84..6a0e698f7b236867d36256ae48aede70
      fireEvent.change(await screen.findByPlaceholderText('https://gateway.example.com/hermes'), {
        target: { value: 'https://gateway.example.com/hermes' }
      })
-@@ -442,7 +352,6 @@ describe('DesktopInstallOverlay first-run setup', () => {
- 
+@@ -471,8 +322,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
+       })
+     )
      render(<DesktopInstallOverlay />)
- 
 -    fireEvent.click(await screen.findByText('Connect to existing Hermes'))
-     fireEvent.change(await screen.findByPlaceholderText('https://gateway.example.com/hermes'), {
-       target: { value: 'https://gateway.example.com/hermes' }
-     })
-@@ -498,11 +407,11 @@ describe('DesktopInstallOverlay first-run setup', () => {
+-    const url = screen.getByPlaceholderText('https://gateway.example.com/hermes')
++    const url = await screen.findByPlaceholderText('https://gateway.example.com/hermes')
+     fireEvent.change(url, { target: { value: 'https://a.example' } })
+     fireEvent.click(await screen.findByRole('button', { name: /Sign in with/ }))
+     await waitFor(() => expect(desktop.oauthLoginConnectionConfig).toHaveBeenCalledWith('https://a.example'))
+@@ -483,10 +333,6 @@ describe('DesktopInstallOverlay first-run setup', () => {
+     expect(desktop.testConnectionConfig).not.toHaveBeenCalled()
+     expect(saveConnectionConfig).not.toHaveBeenCalled()
+     expect(desktop.applyConnectionConfig).not.toHaveBeenCalled()
+-    fireEvent.click(screen.getByText('Back'))
+-    fireEvent.click(await screen.findByText('Install Hermes locally'))
+-    expect(desktop.continueBootstrapLocal).toHaveBeenCalledTimes(1)
+-    expect(saveConnectionConfig).not.toHaveBeenCalled()
+   })
+ 
+   it('offers remote connection from the unsupported packaged install screen', async () => {
+@@ -503,11 +349,11 @@ describe('DesktopInstallOverlay first-run setup', () => {
  
      render(<DesktopInstallOverlay />)
  
@@ -367,29 +419,65 @@ index 7351280894c9dda3f636eb91f4a968972b548c84..6a0e698f7b236867d36256ae48aede70
  
      desktop.probeConnectionConfig.mockResolvedValue({
        authMode: 'token',
+@@ -576,35 +422,3 @@ describe('DesktopInstallOverlay first-run setup', () => {
+   })
+ })
+ 
+-it.each([
+-  ['installed', false, 'Use Hermes on this computer', /already installed here/i, false],
+-  ['bundled', true, 'Use Hermes on this computer', /included with this app/i, false],
+-  [undefined, false, 'Install Hermes locally', /Will install to/i, true]
+-] as const)(
+-  'local presentation for %s (including old backends)',
+-  async (
+-    local: 'installed' | 'bundled' | undefined,
+-    bundled: boolean,
+-    title: string,
+-    description: RegExp,
+-    footer: boolean
+-  ): Promise<void> => {
+-    const state: DesktopBootstrapState = bootstrapState({
+-      setupChoice: { platform: 'win32', activeRoot: 'C:\\Hermes', local: local ?? 'none', bundled }
+-    })
+-
+-    if (local === undefined && state.setupChoice) {
+-      Reflect.deleteProperty(state.setupChoice, 'local')
+-    }
+-
+-    installDesktopMock(state)
+-    render(<DesktopInstallOverlay />)
+-    expect(await screen.findByText(title)).toBeTruthy()
+-    expect(screen.getByText(description)).toBeTruthy()
+-    expect(screen.queryByText(/Will install to/i) !== null).toBe(footer)
+-
+-    if (!footer) {
+-      expect(screen.queryByText('Install Hermes locally')).toBeNull()
+-    }
+-  }
+-)
 diff --git a/apps/desktop/src/components/desktop-install-overlay.tsx b/apps/desktop/src/components/desktop-install-overlay.tsx
-index e7f51ae3c3a1b1c03550c6d50d0e181744791f33..af1f94a86c87a00731fc3e62a38d7059e103152f 100644
+index 0cc4d279faa81e0294be51b03e2359ef42b54fc4..ab58ae8263b54359c47a095bcc54ac9f79c5f4bd 100644
 --- a/apps/desktop/src/components/desktop-install-overlay.tsx
 +++ b/apps/desktop/src/components/desktop-install-overlay.tsx
-@@ -411,11 +411,14 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
+@@ -436,11 +436,14 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
      return null
    }
  
 -  if (remoteOpen) {
--    return <FirstRunRemoteForm onBack={() => setRemoteOpen(false)} />
+-    return <FirstRunRemoteSetup onBack={() => setRemoteOpen(false)} />
 +  // Community build: offer a server connection, not local installation.
 +  const connectionSetup = !state.active && !state.error && Boolean(state.setupChoice || state.unsupportedPlatform)
 +
 +  if (remoteOpen || connectionSetup) {
-+    return <FirstRunRemoteForm onBack={() => setRemoteOpen(false)} showBack={!connectionSetup} />
++    return <FirstRunRemoteSetup onBack={() => setRemoteOpen(false)} showBack={!connectionSetup} />
    }
  
 -  if (state.setupChoice) {
 +  if (state.setupChoice && !state.active && !state.error) {
-     return (
-       <div className="fixed inset-0 z-(--z-setup) flex items-center justify-center bg-background/90 p-4 backdrop-blur-md">
-         <div className="w-full max-w-2xl rounded-xl border border-(--stroke-nous) bg-card p-8 shadow-nous">
-@@ -492,7 +495,7 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
+     const localState = state.setupChoice.local
+     const localPres = localCardPresentation(localState)
+ 
+@@ -524,7 +527,7 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
    // there's no Hermes Agent installed yet and we can't drive install.sh
    // (no stage protocol equivalent yet). Show a copy-paste install command
    // and the docs URL; user runs it from Terminal and relaunches the app.
@@ -398,7 +486,7 @@ index e7f51ae3c3a1b1c03550c6d50d0e181744791f33..af1f94a86c87a00731fc3e62a38d7059
      const ups = state.unsupportedPlatform
      const platformLabel = ups.platform === 'darwin' ? 'macOS' : ups.platform === 'linux' ? 'Linux' : ups.platform
  
-@@ -729,23 +732,11 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
+@@ -764,23 +767,11 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
                    {copied ? copy.copiedOutput : copy.copyOutput}
                  </Button>
                  <Button
@@ -424,29 +512,25 @@ index e7f51ae3c3a1b1c03550c6d50d0e181744791f33..af1f94a86c87a00731fc3e62a38d7059
                  </Button>
                </div>
              </div>
-diff --git a/apps/desktop/src/components/first-run-remote-form.tsx b/apps/desktop/src/components/first-run-remote-form.tsx
-index 86b38b9de266401748e260d9ef2d9c6e8230d38f..e29a111dc9f56d333cc206215b4a4997f1b03fa2 100644
---- a/apps/desktop/src/components/first-run-remote-form.tsx
-+++ b/apps/desktop/src/components/first-run-remote-form.tsx
-@@ -14,13 +14,14 @@ type ProbeStatus = 'idle' | 'probing' | 'done' | 'error'
+diff --git a/apps/desktop/src/components/remote-setup/first-run.tsx b/apps/desktop/src/components/remote-setup/first-run.tsx
+index 5c7fe3a5411b83861b5e3768c3375cdc4593d03f..523883b810ca68c4b18070381bd067f4628e6cfd 100644
+--- a/apps/desktop/src/components/remote-setup/first-run.tsx
++++ b/apps/desktop/src/components/remote-setup/first-run.tsx
+@@ -11,9 +11,10 @@ import { useRemoteSetup } from './use-remote-setup'
  
- interface FirstRunRemoteFormProps {
+ interface FirstRunRemoteSetupProps {
    onBack: () => void
 +  showBack?: boolean
  }
  
- function errorMessage(err: unknown): string {
-   return err instanceof Error ? err.message : String(err || 'Unknown error')
- }
- 
--export function FirstRunRemoteForm({ onBack }: FirstRunRemoteFormProps) {
-+export function FirstRunRemoteForm({ onBack, showBack = true }: FirstRunRemoteFormProps) {
+-export function FirstRunRemoteSetup({ onBack }: FirstRunRemoteSetupProps): ReactElement {
++export function FirstRunRemoteSetup({ onBack, showBack = true }: FirstRunRemoteSetupProps): ReactElement {
    const { t } = useI18n()
    const copy = t.install
-   const [remoteUrl, setRemoteUrl] = useState('')
-@@ -331,9 +332,11 @@ export function FirstRunRemoteForm({ onBack }: FirstRunRemoteFormProps) {
+   const setup = useRemoteSetup({ host: 'first-run' })
+@@ -53,9 +54,11 @@ export function FirstRunRemoteSetup({ onBack }: FirstRunRemoteSetupProps): React
+           {error ? <div className="mt-3 text-sm text-destructive">{error}</div> : null}
          </div>
- 
          <div className="mt-7 flex flex-wrap items-center justify-between gap-3">
 -          <Button disabled={applying} onClick={onBack} size="sm" variant="ghost">
 -            {copy.backToSetup}
@@ -458,4 +542,4 @@ index 86b38b9de266401748e260d9ef2d9c6e8230d38f..e29a111dc9f56d333cc206215b4a4997
 +          )}
            <div className="flex items-center gap-2">
              <Button
-               disabled={testing || applying || !canTest}
+               disabled={setup.testing || applying || !setup.canTest}
