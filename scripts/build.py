@@ -80,7 +80,7 @@ def main():
     cmd('git-checkout',[git,'-c','core.autocrlf=false','checkout','--detach','FETCH_HEAD'],src)
     sha=subprocess.check_output([git,'rev-parse','HEAD'],cwd=src,env=env,text=True).strip()
     if sha!=pin['commit']:raise RuntimeError('Fetched commit does not match pin')
-    desktop=src/'apps/desktop';pkg=json.loads((desktop/'package.json').read_text())
+    desktop=src/'apps/desktop';pkg=json.loads((desktop/'package.json').read_text(encoding='utf-8'))
     if pkg['version'] not in (pin['version'], '0.0.0'):raise RuntimeError('Upstream version does not match pin')
     source_patch=apply_patches(src,pin,env=env)
     (logs/'source-patch.json').write_text(json.dumps(source_patch,indent=2)+'\n')
@@ -136,7 +136,7 @@ def main():
             break
         if search.parent==search:raise RuntimeError('electron-builder is not installed')
         search=search.parent
-    bin_field=json.loads(builder_pkg.read_text()).get('bin')
+    bin_field=json.loads(builder_pkg.read_text(encoding='utf-8')).get('bin')
     rel=bin_field.get('electron-builder') if isinstance(bin_field,dict) else bin_field
     if not isinstance(rel,str) or not rel:raise RuntimeError('electron-builder bin missing')
     builder=builder_pkg.parent/rel
