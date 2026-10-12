@@ -12,7 +12,7 @@ import sys
 import tarfile
 import tempfile
 
-from common import ROOT, WORK, OUT, load_pin, release_version, archive_name, clean_environment, run, gate_test_report
+from common import ROOT, WORK, OUT, load_pin, release_version, archive_name, clean_environment, full_suite_home, run, gate_test_report
 from package import digest, native_inventory, inventory, make_archive, unpack_archive
 from macos_signing import verify_bundle, verify_extracted
 from source_patches import apply_patches, verify_source_state
@@ -39,6 +39,49 @@ def extract_npm_pack(tarball, dest):
                 tar.extract(member, dest, filter='data')
             else:
                 tar.extract(member, dest)
+
+
+def prepare_linux_test_runtime(src, env, logs):
+    """Install the locked interpreter the upstream desktop suite actually drives.
+
+    mac-sign, checkout publication, the PM launcher and the bootstrap probe all
+    refuse the system python: they need HERMES_PYTHON (pm, ruamel) and a real
+    uv on PATH. The environment stays under WORK, outside the source tree.
+    """
+    home = WORK/'pm-home'
+    home.mkdir(parents=True, exist_ok=True)
+    github_env, github_output, github_path = logs/'pm.env', logs/'pm.out', logs/'pm.path'
+    for path in (github_env, github_output, github_path):
+        path.write_text('', encoding='utf-8')
+    prep = dict(env)
+    prep.update(GITHUB_ENV=str(github_env), GITHUB_OUTPUT=str(github_output), GITHUB_PATH=str(github_path),
+                HERMES_HOME=str(home), HERMES_RUNTIME_DIR=str(home/'tools'))
+    script = src/'scripts/ci/setup_toolchain.py'
+    common = ['--toolchain', 'python', '--extras', '[]', '--home', str(home)]
+    base = [sys.executable, str(script)]
+    run('pm-prepare', base+['prepare', *common], src, prep, logs)
+    run('pm-install', base+['install', *common], src, prep, logs)
+    run('pm-dependencies', base+['dependencies', '--test-environment', *common], src, prep, logs)
+    exported = {}
+    for line in github_env.read_text(encoding='utf-8').splitlines():
+        key, sep, value = line.partition('=')
+        if sep:
+            exported[key] = value
+    python = exported.get('HERMES_PYTHON', '')
+    if not python or not Path(python).is_file():
+        raise RuntimeError('Prepared Hermes test interpreter missing')
+    path = env['PATH']
+    for directory in github_path.read_text(encoding='utf-8').splitlines():
+        if directory:
+            path = directory + os.pathsep + path
+    suite = dict(env)
+    suite['HERMES_PYTHON'] = python
+    suite['PATH'] = path
+    short = full_suite_home()
+    short.mkdir(exist_ok=True)
+    suite['HOME'] = str(short)
+    suite['USERPROFILE'] = str(short)
+    return suite
 
 
 def main():
@@ -68,7 +111,7 @@ def main():
     npm_file=Path(npm_path).parent/'node_modules/npm/bin/npm-cli.js' if os.name=='nt' else Path(npm_path).resolve()
     if not npm_file.is_file():raise RuntimeError('Cannot locate the installed npm CLI')
     npm=[node,str(npm_file)]
-    def cmd(name,command,cwd=ROOT,allow_failure=False):return run(name,command,cwd,env,logs,allow_failure)
+    def cmd(name,command,cwd=ROOT,allow_failure=False,command_env=None):return run(name,command,cwd,env if command_env is None else command_env,logs,allow_failure)
     hostnode=subprocess.check_output([node,'-p','process.platform+" "+process.arch+" "+process.versions.node'],env=env,text=True).strip()
     if hostnode!=f'{target} {arch} {pin["node"]}':raise RuntimeError(f'Expected pinned native Node, got {hostnode}')
     print('Native build:',hostnode,flush=True)
@@ -225,13 +268,13 @@ def main():
             if p.is_file():shutil.copyfile(p,logs/('runtime-'+name))
     if target=='linux':
         report=logs/'vitest.json'
-        env['DESKTOP_TEST_RECEIPT']=str(logs/'full-completion.json')
-        rc=cmd('upstream-full-tests',npm+['test','--','--maxWorkers=4','--reporter=default','--reporter=json','--outputFile.json='+str(report)]+reporter,desktop,True)
+        suite=prepare_linux_test_runtime(src, env, logs)
+        suite['DESKTOP_TEST_RECEIPT']=str(logs/'full-completion.json')
+        rc=cmd('upstream-full-tests',npm+['test','--','--maxWorkers=4','--reporter=default','--reporter=json','--outputFile.json='+str(report)]+reporter,desktop,True,suite)
         data=json.loads(report.read_text());data['runCompletion']=json.loads((logs/'full-completion.json').read_text())
         gate=gate_test_report(data,pin,rc)
         (logs/'test-gate.json').write_text(json.dumps(gate,indent=2)+'\n')
         print('FULL SUITE (exceptions are explicit):',json.dumps(gate),flush=True)
-    env.pop('DESKTOP_TEST_RECEIPT',None)
     mac_signing=None
     if target=='darwin':
         mac_signing=verify_extracted(extracted/bundle.name,arch,staged_count,cmd,logs)

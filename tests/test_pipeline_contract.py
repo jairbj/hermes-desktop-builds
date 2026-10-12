@@ -9,7 +9,9 @@ class PipelineContractTests(unittest.TestCase):
     def test_patch_is_applied_before_dependency_code_and_verified_after_tests(self):
         source = (ROOT / 'scripts/build.py').read_text()
         self.assertLess(source.index('source_patch=apply_patches('), source.index("cmd('npm-ci'"))
+        self.assertLess(source.index('prepare_linux_test_runtime('), source.index("cmd('upstream-full-tests'"))
         self.assertLess(source.index("cmd('upstream-full-tests'"), source.index('verify_source_state('))
+        self.assertIn('full_suite_home()', source)
         self.assertIn("'sourceClean':False,'sourceVerified':True,'sourcePatch':source_patch", source)
         for test in ('fleet-rail.test.ts', 'profile-rail-fleet.test.tsx',
                      'desktop-install-overlay.test.tsx', 'connections-registry.test.tsx',

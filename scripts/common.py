@@ -42,6 +42,18 @@ def archive_name(version, platform, arch):
     return f'Hermes-{version}-{platform}-{arch}-{signing}{suffix}'
 
 
+def full_suite_home():
+    """Account home for the Linux vitest process.
+
+    The default SSH control socket stays under ~/.hermes only when
+    ``<home>/.hermes<suffix>/desktop-ssh/<16>.sock.<16>`` fits in the 104-byte
+    sun_path budget. The isolated build home under the doubled GitHub checkout
+    does not, so the product correctly falls back to /tmp and the suffix
+    assertion never sees that root.
+    """
+    return Path('/tmp/hermes-home')
+
+
 def clean_environment(work, pin, inherited=None):
     source = os.environ if inherited is None else inherited
     # Toolchain/OS plumbing only. No GitHub tokens, cloud keys, Python env or agent settings.

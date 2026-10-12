@@ -9,7 +9,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from common import validate_pin, clean_environment, gate_test_report, run
+from common import validate_pin, clean_environment, full_suite_home, gate_test_report, run
 from package import binary_arches, make_archive, inventory, unpack_archive
 
 TEST_TMP=Path(__file__).resolve().parents[1]/'.work/test-tmp'
@@ -29,6 +29,17 @@ class BuildTests(unittest.TestCase):
         for key, val in [('repository','elsewhere/repo'), ('version','../x'), ('revision',True), ('revision',0)]:
             with self.subTest(key=key), self.assertRaises(ValueError):
                 validate_pin({**PIN,key:val})
+
+    def test_full_suite_home_fits_the_ssh_socket_budget(self):
+        home = full_suite_home()
+        # Same bytes defaultControlDir measures: suffixed leaf, then the
+        # 16-hex socket plus OpenSSH's temporary-listener suffix.
+        socket = home / '.hermesmagic-test' / 'desktop-ssh' / '0123456789abcdef.sock.0123456789abcdef'
+        self.assertEqual(str(home), '/tmp/hermes-home')
+        self.assertLessEqual(len(str(socket).encode()), 104)
+        long_home = Path('/home/runner/work/hermes-desktop-builds/hermes-desktop-builds/.work/h')
+        long_socket = long_home / '.hermesmagic-test' / 'desktop-ssh' / '0123456789abcdef.sock.0123456789abcdef'
+        self.assertGreater(len(str(long_socket).encode()), 104)
 
     def test_environment_drops_secrets_and_agent_settings(self):
         with tempfile.TemporaryDirectory() as tmp:
