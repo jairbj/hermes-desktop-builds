@@ -116,10 +116,18 @@ index 4cc5a45b19f32bb78e3ea486f224ca21947593eb..d83d31856f33251ee40b28697b6b4881
      'keeps right-click launch routes exact without selecting a profile (condensed=%s)',
      async condensed => {
 diff --git a/apps/desktop/src/components/desktop-install-overlay.test.tsx b/apps/desktop/src/components/desktop-install-overlay.test.tsx
-index db67e72b6a28e7d837215eb36fbad95cfd82eef7..2f0eaee8ad054ddb707bdf4ab3c4f332d2abec48 100644
+index db67e72b6a28e7d837215eb36fbad95cfd82eef7..dad4c32036f1af22b079d1176cebe4b702aa8287 100644
 --- a/apps/desktop/src/components/desktop-install-overlay.test.tsx
 +++ b/apps/desktop/src/components/desktop-install-overlay.test.tsx
-@@ -54,33 +54,6 @@ function installDesktopMock(state: DesktopBootstrapState) {
+@@ -33,6 +33,7 @@ function installDesktopMock(state: DesktopBootstrapState) {
+       return () => bootstrapListeners.delete(listener)
+     }),
+     continueBootstrapLocal: vi.fn().mockResolvedValue({ ok: true }),
++    cancelBootstrap: vi.fn().mockResolvedValue({ ok: true, cancelled: true }),
+     resetBootstrap: vi.fn().mockResolvedValue({ ok: true }),
+     probeConnectionConfig: vi.fn(),
+     testConnectionConfig: vi.fn(),
+@@ -54,33 +55,6 @@ function installDesktopMock(state: DesktopBootstrapState) {
    return desktop
  }
  
@@ -153,23 +161,23 @@ index db67e72b6a28e7d837215eb36fbad95cfd82eef7..2f0eaee8ad054ddb707bdf4ab3c4f332
  beforeEach(() => {
    vi.restoreAllMocks()
  })
-@@ -92,171 +65,52 @@ afterEach(() => {
+@@ -92,171 +66,54 @@ afterEach(() => {
  })
  
  describe('DesktopInstallOverlay first-run setup', () => {
 -  it('shows the remote/local choice without installer progress', async () => {
 -    installDesktopMock(
--      bootstrapState({
++  it.each(['win32', 'darwin', 'linux'])('opens the remote form directly on %s without local-install offers', async platform => {
++    const desktop = installDesktopMock(
+       bootstrapState({
 -        setupChoice: {
 -          platform: 'win32',
 -          activeRoot: 'C:\\Users\\me\\AppData\\Local\\hermes\\hermes-agent',
 -          local: 'none',
 -          bundled: false
 -        }
--      })
-+  it.each(['win32', 'darwin', 'linux'])('opens the remote form directly on %s without local-install offers', async platform => {
-+    const desktop = installDesktopMock(
-+      bootstrapState({ setupChoice: { platform, activeRoot: '/test/hermes-agent' } })
++        setupChoice: { platform, activeRoot: '/test/hermes-agent', local: 'none', bundled: false }
+       })
      )
 -
      render(<DesktopInstallOverlay />)
@@ -358,7 +366,7 @@ index db67e72b6a28e7d837215eb36fbad95cfd82eef7..2f0eaee8ad054ddb707bdf4ab3c4f332
    })
  
    it('requires a successful token connection test before applying remote config', async () => {
-@@ -287,7 +141,6 @@ describe('DesktopInstallOverlay first-run setup', () => {
+@@ -287,7 +144,6 @@ describe('DesktopInstallOverlay first-run setup', () => {
  
      render(<DesktopInstallOverlay />)
  
@@ -366,7 +374,7 @@ index db67e72b6a28e7d837215eb36fbad95cfd82eef7..2f0eaee8ad054ddb707bdf4ab3c4f332
      fireEvent.change(await screen.findByPlaceholderText('https://gateway.example.com/hermes'), {
        target: { value: 'https://gateway.example.com/hermes' }
      })
-@@ -353,7 +206,6 @@ describe('DesktopInstallOverlay first-run setup', () => {
+@@ -353,7 +209,6 @@ describe('DesktopInstallOverlay first-run setup', () => {
  
      render(<DesktopInstallOverlay />)
  
@@ -374,7 +382,7 @@ index db67e72b6a28e7d837215eb36fbad95cfd82eef7..2f0eaee8ad054ddb707bdf4ab3c4f332
      fireEvent.change(await screen.findByPlaceholderText('https://gateway.example.com/hermes'), {
        target: { value: 'https://gateway.example.com/hermes' }
      })
-@@ -405,7 +257,6 @@ describe('DesktopInstallOverlay first-run setup', () => {
+@@ -405,7 +260,6 @@ describe('DesktopInstallOverlay first-run setup', () => {
  
      render(<DesktopInstallOverlay />)
  
@@ -382,7 +390,7 @@ index db67e72b6a28e7d837215eb36fbad95cfd82eef7..2f0eaee8ad054ddb707bdf4ab3c4f332
      fireEvent.change(await screen.findByPlaceholderText('https://gateway.example.com/hermes'), {
        target: { value: 'https://gateway.example.com/hermes' }
      })
-@@ -471,8 +322,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
+@@ -471,8 +325,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
        })
      )
      render(<DesktopInstallOverlay />)
@@ -392,7 +400,7 @@ index db67e72b6a28e7d837215eb36fbad95cfd82eef7..2f0eaee8ad054ddb707bdf4ab3c4f332
      fireEvent.change(url, { target: { value: 'https://a.example' } })
      fireEvent.click(await screen.findByRole('button', { name: /Sign in with/ }))
      await waitFor(() => expect(desktop.oauthLoginConnectionConfig).toHaveBeenCalledWith('https://a.example'))
-@@ -483,10 +333,6 @@ describe('DesktopInstallOverlay first-run setup', () => {
+@@ -483,10 +336,6 @@ describe('DesktopInstallOverlay first-run setup', () => {
      expect(desktop.testConnectionConfig).not.toHaveBeenCalled()
      expect(saveConnectionConfig).not.toHaveBeenCalled()
      expect(desktop.applyConnectionConfig).not.toHaveBeenCalled()
@@ -403,7 +411,7 @@ index db67e72b6a28e7d837215eb36fbad95cfd82eef7..2f0eaee8ad054ddb707bdf4ab3c4f332
    })
  
    it('offers remote connection from the unsupported packaged install screen', async () => {
-@@ -503,11 +349,11 @@ describe('DesktopInstallOverlay first-run setup', () => {
+@@ -503,11 +352,11 @@ describe('DesktopInstallOverlay first-run setup', () => {
  
      render(<DesktopInstallOverlay />)
  
@@ -419,7 +427,7 @@ index db67e72b6a28e7d837215eb36fbad95cfd82eef7..2f0eaee8ad054ddb707bdf4ab3c4f332
  
      desktop.probeConnectionConfig.mockResolvedValue({
        authMode: 'token',
-@@ -576,35 +422,3 @@ describe('DesktopInstallOverlay first-run setup', () => {
+@@ -576,35 +425,3 @@ describe('DesktopInstallOverlay first-run setup', () => {
    })
  })
  
