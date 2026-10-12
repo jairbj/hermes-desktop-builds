@@ -52,19 +52,20 @@ index 0000000000000000000000000000000000000000..de835b161b10137d93a986bc28fb6e1b
 +  })
 +})
 diff --git a/apps/desktop/src/app/chat/sidebar/fleet-rail.ts b/apps/desktop/src/app/chat/sidebar/fleet-rail.ts
-index 10de23cfa643698379751de5abbe00e4cb8c5fc8..7f9529e4e0511dcf1ccb9c6cb29265bb5c755d6a 100644
+index 10de23cfa643698379751de5abbe00e4cb8c5fc8..374704f18332883aff6734becc925d1676dbe5dc 100644
 --- a/apps/desktop/src/app/chat/sidebar/fleet-rail.ts
 +++ b/apps/desktop/src/app/chat/sidebar/fleet-rail.ts
-@@ -70,6 +70,15 @@ export function buildRestGroups({
+@@ -70,6 +70,16 @@ export function buildRestGroups({
      const source = roster?.sources.find(candidate => candidate.connectionId === connection.id)
      const rows = roster?.agents.filter(agent => agent.connectionId === connection.id) ?? []
  
-+    // Community builds defer local setup when an active remote gateway is
-+    // running. An empty local source with connect-on-demand latency would otherwise
-+    // pin an inert "This device" bucket into the sidebar even though all chat
-+    // traffic is served by the remote machine.
-+    if (connection.id === 'local' && activeConnectionId && rows.length === 0
-+        && (!source || source.error === 'connect-on-demand')) {
++    // Community builds defer local setup only when a known other gateway is
++    // active and the local source is an empty connect-on-demand placeholder.
++    // A missing roster still shows every gateway, and an unknown active id
++    // must not hide This device.
++    if (connection.id === 'local' && activeConnectionId
++        && connections.some(item => item.id === activeConnectionId)
++        && rows.length === 0 && source?.error === 'connect-on-demand') {
 +      continue
 +    }
 +
@@ -72,10 +73,10 @@ index 10de23cfa643698379751de5abbe00e4cb8c5fc8..7f9529e4e0511dcf1ccb9c6cb29265bb
        continue
      }
 diff --git a/apps/desktop/src/app/chat/sidebar/profile-rail-fleet.test.tsx b/apps/desktop/src/app/chat/sidebar/profile-rail-fleet.test.tsx
-index 4cc5a45b19f32bb78e3ea486f224ca21947593eb..d83d31856f33251ee40b28697b6b4881410a9260 100644
+index 4cc5a45b19f32bb78e3ea486f224ca21947593eb..cadae6f2e0e9aac05127c6bf957248acf994e984 100644
 --- a/apps/desktop/src/app/chat/sidebar/profile-rail-fleet.test.tsx
 +++ b/apps/desktop/src/app/chat/sidebar/profile-rail-fleet.test.tsx
-@@ -341,6 +341,39 @@ describe('ProfileRail overflow', () => {
+@@ -341,6 +341,47 @@ describe('ProfileRail overflow', () => {
  })
  
  describe('ProfileRail fleet mode', () => {
@@ -108,7 +109,15 @@ index 4cc5a45b19f32bb78e3ea486f224ca21947593eb..d83d31856f33251ee40b28697b6b4881
 +    const local = screen.getByRole('group', { name: 'Profiles on This device' })
 +    expect(local.getAttribute('data-reachable')).toBe('false')
 +    expect(container.querySelector('[data-connection-id="local"] [data-slot="profile-rail-unreachable"]')).toBeTruthy()
-+    fireEvent.click(within(local).getByRole('button', { name: 'default · This device' }))
++    fireEvent.click(within(local).getByRole('button', {
++      name: 'This device (local backend — installs Hermes if missing, otherwise opens a fresh session)'
++    }))
++    expect(selectConnection).not.toHaveBeenCalled()
++    expect(await screen.findByRole('dialog', { name: 'Switch to This device?' })).toBeTruthy()
++    fireEvent.click(screen.getByRole('button', { name: 'Switch' }))
++    await act(async () => {
++      await Promise.resolve()
++    })
 +    expect(selectConnection).toHaveBeenCalledWith('local', { profile: 'default' })
 +  })
 +

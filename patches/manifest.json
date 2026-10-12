@@ -3,7 +3,7 @@
   "patches": [
     {
       "file": "remote-client-ui.patch",
-      "sha256": "296a17d67e9de9746de9fd887e5ef496522d1e44102a4ebf454fce12cd1f2d12"
+      "sha256": "e96e259df89d383eaf4320da569fcd8042a0339e2845cf660993a1f9e2abe732"
     },
     {
       "file": "homebrew-client-updater.patch",
