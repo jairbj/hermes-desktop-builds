@@ -151,7 +151,21 @@ def main():
         buildargs+=['-c.mac.sign=null','-c.beforePack='+str(ROOT/'scripts/before-pack-macos.mjs')]
         env['DESKTOP_BUILD_PYTHON']=sys.executable
         env['DESKTOP_BUILD_LOGS']=str(logs)
-    cmd('electron-builder',buildargs,desktop)
+    # electron-builder 27 runs `npm list` from the workspace root. That JSON
+    # covers every workspace and exhausts the heap. Hiding the workspaces
+    # field makes the collector list only apps/desktop. The original bytes
+    # are restored so the source tree stays clean.
+    root_manifest=src/'package.json'
+    original_manifest=root_manifest.read_bytes()
+    manifest=json.loads(original_manifest)
+    if 'workspaces' in manifest:
+        del manifest['workspaces']
+        root_manifest.write_bytes(json.dumps(manifest).encode()+b'\n')
+    try:
+        cmd('electron-builder',buildargs,desktop)
+    finally:
+        if root_manifest.read_bytes()!=original_manifest:
+            root_manifest.write_bytes(original_manifest)
     env.pop('DESKTOP_BUILD_PYTHON',None)
     env.pop('DESKTOP_BUILD_LOGS',None)
     dirname={'darwin':'mac-arm64' if arch=='arm64' else 'mac','win32':'win-unpacked','linux':'linux-unpacked'}[target]
