@@ -61,6 +61,9 @@ def main():
     source_patch=apply_patches(src,pin,env=env)
     (logs/'source-patch.json').write_text(json.dumps(source_patch,indent=2)+'\n')
     cmd('npm-ci',npm+['ci','--ignore-scripts','--no-audit','--no-fund','--workspace','apps/desktop','--include-workspace-root'],src)
+    # electron/source-backend.test.ts imports ws. The lockfile only installs it
+    # as a peer of ui-tui's ink, which this workspace-scoped ci does not include.
+    cmd('install-ws',npm+['install','ws@8.21.1','--no-save','--ignore-scripts','--no-audit','--no-fund','--no-package-lock'],src)
     env['DESKTOP_SIGNING_TEST_SOURCE']=str(src)
     cmd('mac-signing-api-unit-tests',[node,'--test',str(ROOT/'tests/macos-signing-api.test.mjs')])
     env.pop('DESKTOP_SIGNING_TEST_SOURCE')
