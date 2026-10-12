@@ -63,7 +63,9 @@ def clean_environment(work, pin, inherited=None):
         'GIT_CONFIG_NOSYSTEM':'1', 'GIT_CONFIG_GLOBAL':str(home/'.gitconfig'),
         'GIT_TERMINAL_PROMPT':'0', 'GIT_CEILING_DIRECTORIES':str(work),
         'GITHUB_SHA':pin['commit'], 'GITHUB_REF_NAME':'main',
-        'NODE_OPTIONS':'--max-old-space-size=4096', 'TZ':'UTC', 'LANG':'C.UTF-8', 'CI':'1',
+        # electron-builder 27 keeps the workspace module walk in memory and
+        # crosses a 4GB heap while collecting the desktop dependencies.
+        'NODE_OPTIONS':'--max-old-space-size=8192', 'TZ':'UTC', 'LANG':'C.UTF-8', 'CI':'1',
         'PYTHONNOUSERSITE':'1', 'PYTHONDONTWRITEBYTECODE':'1', 'PYTHONUTF8':'1',
     })
     return env
@@ -101,6 +103,20 @@ WINDOWS_DARWIN_MODE_MESSAGE = (
     'AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:',
     '438 !== 493',
 )
+# Off-Linux hosts return before the compiler, so the warning is the cross-build
+# line rather than the Linux "packaging continues" line. The empty-directory
+# assertion is earlier in the same test and is not part of this allowance.
+HUD_CROSS_BUILD_LINES = {
+    '71d34bad1045610252eda02ee79549436896e784': 77,
+}
+HUD_CROSS_BUILD_FIXTURE = (
+    'scripts/stage-native-deps.test.mjs',
+    'a missing Linux HUD toolchain leaves no empty package directories',
+)
+HUD_CROSS_BUILD_MESSAGE = (
+    'AssertionError [ERR_ASSERTION]: The input did not match the regular expression /desktop packaging continues/. Input:',
+    "'[hud-modifier] linux-x64 needs a native build; modifier tap unavailable for this target'",
+)
 def _windows_darwin_mode_stack(line_no):
     return re.compile(
         r'^at .*[\\/]apps[\\/]desktop[\\/]scripts[\\/]stage-native-deps\.test\.mjs:'
@@ -127,6 +143,28 @@ def _matches_windows_darwin_mode_fixture(name, assertion, pin, platform):
         and tuple(lines[:2]) == WINDOWS_DARWIN_MODE_MESSAGE
         and all(line.startswith('at ') for line in lines[2:])
         and any(_windows_darwin_mode_stack(WINDOWS_DARWIN_MODE_LINES[pin['commit']]).fullmatch(line)
+                for line in lines[2:])
+    )
+
+
+def _matches_hud_cross_build_fixture(name, assertion, pin, platform):
+    messages = assertion.get('failureMessages')
+    if not (
+        platform in ('darwin', 'win32')
+        and pin['commit'] in HUD_CROSS_BUILD_LINES
+        and name.endswith('/' + HUD_CROSS_BUILD_FIXTURE[0])
+        and assertion.get('fullName') == HUD_CROSS_BUILD_FIXTURE[1]
+        and isinstance(messages, list)
+        and len(messages) == 1
+        and isinstance(messages[0], str)
+    ):
+        return False
+    lines = [line.strip() for line in ANSI_ESCAPE.sub('', messages[0]).splitlines() if line.strip()]
+    return (
+        len(lines) >= 3
+        and tuple(lines[:2]) == HUD_CROSS_BUILD_MESSAGE
+        and all(line.startswith('at ') for line in lines[2:])
+        and any(_windows_darwin_mode_stack(HUD_CROSS_BUILD_LINES[pin['commit']]).fullmatch(line)
                 for line in lines[2:])
     )
 
@@ -160,6 +198,9 @@ def gate_test_report(report, pin, returncode, platform=None):
             if _matches_windows_darwin_mode_fixture(name, a, pin, platform):
                 match = ('Cross-Darwin fixture asserted POSIX 0755 but Windows reported 0666; '
                          'actual Mac helper mode is verified in both native Mac builds.')
+            elif _matches_hud_cross_build_fixture(name, a, pin, platform):
+                match = ('Off-Linux hosts skip the HUD compiler and warn that the target needs its own build. '
+                         'The Linux runner still compiles or reports the packaging-continues warning.')
             if not match:
                 raise ValueError(f'Unreviewed upstream failure: {name}: {a["fullName"]}')
             failures.append({'file':name,'test':a['fullName'],'reason':match})

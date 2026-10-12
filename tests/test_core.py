@@ -145,6 +145,44 @@ class BuildTests(unittest.TestCase):
             with self.subTest(message=changed_message), self.assertRaises(ValueError):
                 gate_test_report(changed, PIN, 1, 'win32')
 
+    def test_hud_cross_build_warning_is_allowed_off_linux(self):
+        pin = {**PIN, 'commit': '71d34bad1045610252eda02ee79549436896e784'}
+        message = (
+            'AssertionError [ERR_ASSERTION]: The input did not match the regular expression '
+            '/desktop packaging continues/. Input:\n\n'
+            "'[hud-modifier] linux-x64 needs a native build; modifier tap unavailable for this target'\n\n"
+            '    at /Users/runner/work/hermes-desktop-builds/.work/src/apps/desktop/scripts/'
+            'stage-native-deps.test.mjs:77:12\n'
+            '    at file:///Users/runner/work/hermes-desktop-builds/.work/src/node_modules/'
+            '@vitest/runner/dist/chunk-artifact.js:302:11'
+        )
+        report = {
+            'numTotalTests': 1,
+            'numFailedTests': 1,
+            'testResults': [{
+                'name': '/src/apps/desktop/scripts/stage-native-deps.test.mjs',
+                'status': 'failed',
+                'assertionResults': [{
+                    'fullName': 'a missing Linux HUD toolchain leaves no empty package directories',
+                    'status': 'failed',
+                    'failureMessages': [message],
+                }],
+            }],
+            'runCompletion': {'reason': 'failed', 'unhandledErrors': []},
+        }
+        for platform in ('darwin', 'win32'):
+            result = gate_test_report(report, pin, 1, platform)
+            self.assertFalse(result['suiteGreen'])
+            self.assertTrue(result['releaseGatePassed'])
+        with self.assertRaises(ValueError):
+            gate_test_report(report, pin, 1, 'linux')
+        moved = json.loads(json.dumps(report))
+        moved['testResults'][0]['assertionResults'][0]['failureMessages'] = [
+            message.replace('stage-native-deps.test.mjs:77:12', 'stage-native-deps.test.mjs:78:12')
+        ]
+        with self.assertRaises(ValueError):
+            gate_test_report(moved, pin, 1, 'darwin')
+
     def test_clean_test_report(self):
         r={'numTotalTests':3,'numPassedTests':3,'numFailedTests':0,'numRuntimeErrorTestSuites':0,'testResults':[{'name':'passing.test.ts','status':'passed','assertionResults':[{'status':'passed'}]*3}],'runCompletion':{'reason':'passed','unhandledErrors':[]}}
         self.assertEqual(gate_test_report(r,PIN,0)['allowedFailures'],[])
