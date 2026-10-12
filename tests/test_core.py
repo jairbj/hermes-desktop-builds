@@ -1,7 +1,7 @@
 import importlib.util
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import struct
 import subprocess
 import sys
@@ -31,13 +31,13 @@ class BuildTests(unittest.TestCase):
                 validate_pin({**PIN,key:val})
 
     def test_full_suite_home_fits_the_ssh_socket_budget(self):
-        home = full_suite_home()
-        # Same bytes defaultControlDir measures: suffixed leaf, then the
-        # 16-hex socket plus OpenSSH's temporary-listener suffix.
+        # sun_path is a POSIX byte budget. Windows pathlib rewrites the same
+        # absolute path with backslashes, which is not what the Linux job sets.
+        home = PurePosixPath(full_suite_home().as_posix())
         socket = home / '.hermesmagic-test' / 'desktop-ssh' / '0123456789abcdef.sock.0123456789abcdef'
         self.assertEqual(str(home), '/tmp/hermes-home')
         self.assertLessEqual(len(str(socket).encode()), 104)
-        long_home = Path('/home/runner/work/hermes-desktop-builds/hermes-desktop-builds/.work/h')
+        long_home = PurePosixPath('/home/runner/work/hermes-desktop-builds/hermes-desktop-builds/.work/h')
         long_socket = long_home / '.hermesmagic-test' / 'desktop-ssh' / '0123456789abcdef.sock.0123456789abcdef'
         self.assertGreater(len(str(long_socket).encode()), 104)
 
