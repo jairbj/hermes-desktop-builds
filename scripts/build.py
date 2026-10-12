@@ -143,7 +143,11 @@ def main():
     if not builder.is_file():raise RuntimeError('electron-builder CLI missing')
     pack=WORK/'packed'
     staged_count=0
-    buildargs=[node,str(builder),{'darwin':'--mac','win32':'--win','linux':'--linux'}[target],'--dir','--'+arch,'--publish','never','-c.forceCodeSigning=false',f'-c.extraMetadata.version={pin["version"]}','-c.directories.output='+str(pack)]
+    # Upstream keeps the packager config in electron-builder.config.cjs and
+    # always passes --config. Without it, builder 27 uses the default file
+    # set and the package name, so the asar contains e2e/*.py and the Mac
+    # bundle identity is not Hermes.
+    buildargs=[node,str(builder),'--config',str(desktop/'electron-builder.config.cjs'),{'darwin':'--mac','win32':'--win','linux':'--linux'}[target],'--dir','--'+arch,'--publish','never','-c.forceCodeSigning=false',f'-c.extraMetadata.version={pin["version"]}','-c.directories.output='+str(pack)]
     if target=='darwin':
         # Delay outer signing until all resources exist. Sign staged native bytes only
         # after upstream beforePack re-stages them, BEFORE ASAR hashes are computed.
