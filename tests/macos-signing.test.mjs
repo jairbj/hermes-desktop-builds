@@ -33,6 +33,23 @@ test('ad-hoc identity is explicit; retain upstream entitlements and hardened run
   } finally { fs.rmSync(base, {recursive: true, force: true}); }
 });
 
+test('package.json without a build field uses the electron dependency and upstream entitlement paths', () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'mac-sign-options-'));
+  const desktop = path.join(base, 'apps/desktop');
+  fs.mkdirSync(desktop, {recursive: true});
+  fs.writeFileSync(path.join(desktop, 'package.json'), JSON.stringify({
+    devDependencies: {electron: '40.10.2'},
+  }));
+  const app = path.join(base, 'Hermes.app');
+  fs.mkdirSync(path.join(app, 'Contents/Resources/app.asar.unpacked'), {recursive: true});
+  try {
+    const options = signingOptions(base, app);
+    assert.equal(options.version, '40.10.2');
+    assert.match(options.optionsForFile(app).entitlements, /electron\/entitlements\.mac\.plist$/);
+    assert.match(options.optionsForFile(path.join(app, 'Contents/Frameworks/Helper.app')).entitlements, /electron\/entitlements\.mac\.inherit\.plist$/);
+  } finally { fs.rmSync(base, {recursive: true, force: true}); }
+});
+
 test('sign only Mach-O code/bundles, never ASAR data or already-hashed unpacked modules', () => {
   const {base, app, options} = fixture();
   try {

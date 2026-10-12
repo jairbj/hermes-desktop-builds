@@ -91,14 +91,30 @@ def main():
     (logs/'targeted-gate.json').write_text(json.dumps(targeted_gate,indent=2)+'\n')
     print('TARGETED SUITE:',json.dumps(targeted_gate),flush=True)
     cmd('build',npm+['run','build'],desktop)
-    builder=subprocess.check_output([node,'-p',"require.resolve('electron-builder/cli.js')"],cwd=desktop,env=env,text=True).strip()
+    # electron-builder 27 exports only "." and "./internal", so require.resolve
+    # of cli.js fails. The published bin is still package.json -> ./cli.js.
+    search=desktop
+    builder_pkg=None
+    while True:
+        candidate=search/'node_modules'/'electron-builder'/'package.json'
+        if candidate.is_file():
+            builder_pkg=candidate
+            break
+        if search.parent==search:raise RuntimeError('electron-builder is not installed')
+        search=search.parent
+    bin_field=json.loads(builder_pkg.read_text()).get('bin')
+    rel=bin_field.get('electron-builder') if isinstance(bin_field,dict) else bin_field
+    if not isinstance(rel,str) or not rel:raise RuntimeError('electron-builder bin missing')
+    builder=builder_pkg.parent/rel
+    if not builder.is_file():raise RuntimeError('electron-builder CLI missing')
     pack=WORK/'packed'
     staged_count=0
-    buildargs=[node,builder,{'darwin':'--mac','win32':'--win','linux':'--linux'}[target],'--dir','--'+arch,'--publish','never','-c.forceCodeSigning=false',f'-c.extraMetadata.version={pin["version"]}','-c.directories.output='+str(pack)]
+    buildargs=[node,str(builder),{'darwin':'--mac','win32':'--win','linux':'--linux'}[target],'--dir','--'+arch,'--publish','never','-c.forceCodeSigning=false',f'-c.extraMetadata.version={pin["version"]}','-c.directories.output='+str(pack)]
     if target=='darwin':
         # Delay outer signing until all resources exist. Sign staged native bytes only
         # after upstream beforePack re-stages them, BEFORE ASAR hashes are computed.
-        buildargs+=['-c.mac.identity=null','-c.beforePack='+str(ROOT/'scripts/before-pack-macos.mjs')]
+        # electron-builder 27 skips signing only when mac.sign is null.
+        buildargs+=['-c.mac.sign=null','-c.beforePack='+str(ROOT/'scripts/before-pack-macos.mjs')]
         env['DESKTOP_BUILD_PYTHON']=sys.executable
         env['DESKTOP_BUILD_LOGS']=str(logs)
     cmd('electron-builder',buildargs,desktop)
@@ -168,7 +184,9 @@ def main():
         mac_signing=verify_extracted(extracted/bundle.name,arch,staged_count,cmd,logs)
         if inventory(bundle)!=inventory(extracted/bundle.name):raise RuntimeError('Mac negative tests did not restore exact bundle')
     verify_source_state(src,pin,source_patch,env=env)
-    manifest={'version':version,'upstream':pin,'platform':target,'arch':arch,'electron':pkg['build']['electronVersion'],
+    electron=(pkg.get('build') or {}).get('electronVersion') or (pkg.get('devDependencies') or {}).get('electron')
+    if not isinstance(electron,str) or not electron:raise RuntimeError('Upstream electron version missing')
+    manifest={'version':version,'upstream':pin,'platform':target,'arch':arch,'electron':electron,
               'archive':archive.name,'sha256':digest(archive),'bytes':archive.stat().st_size,
               'sourceClean':False,'sourceVerified':True,'sourcePatch':source_patch,
               'archiveRoundtrip':True,'nativeSmoke':json.loads((logs/'smoke.json').read_text()),

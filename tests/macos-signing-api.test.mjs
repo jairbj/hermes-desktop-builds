@@ -1,6 +1,7 @@
 // Dependency-contract unit test ONLY: subprocesses are intercepted, never signing real code.
 // Real codesign/native/UI/Gatekeeper tests run separately in scripts/build.py on Macs.
 import assert from 'node:assert/strict';
+import childProcess from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -11,8 +12,9 @@ import {signingOptions} from '../scripts/sign-macos.mjs';
 const source = process.env.DESKTOP_SIGNING_TEST_SOURCE;
 assert(source, 'Point DESKTOP_SIGNING_TEST_SOURCE at the pinned npm-ci source tree');
 const require = createRequire(path.join(source, 'apps/desktop/package.json'));
-const {signAsync} = require('@electron/osx-sign');
-const util = require(path.join(path.dirname(require.resolve('@electron/osx-sign')), 'util.js'));
+// osx-sign 2.x is ESM and exports sign(), not signAsync. Its execFileAsync
+// binding is read-only; the call still goes through child_process.execFile.
+const {sign} = require('@electron/osx-sign');
 
 test('actual pinned signing API honors the exclusion callback before invoking codesign', async () => {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'mac-sign-api-test-'));
@@ -32,19 +34,20 @@ test('actual pinned signing API honors the exclusion callback before invoking co
   // app.asar/icon.png are arbitrary binary DATA rather than Mach-O in real builds.
   for (const file of excluded.slice(0, 2)) fs.writeFileSync(file, Buffer.from([0, 255, 128, 0]));
   const calls = [];
-  const original = util.execFileAsync;
-  util.execFileAsync = async (command, args) => {
+  const original = childProcess.execFile;
+  childProcess.execFile = (command, args, options, callback) => {
+    if (typeof options === 'function') callback = options;
     assert.equal(command, 'codesign', 'Unit test must never invoke external identity/security tools');
     calls.push(args);
-    return '';
+    callback(null, '', '');
   };
   try {
-    await signAsync(signingOptions(base, app));
+    await sign(signingOptions(base, app));
     const signed = calls.filter(args => args.includes('--sign')).map(args => args.at(-1));
     assert.deepEqual(signed.sort(), [native, app].sort(), 'Only unhashed Mach-O and the final bundle may be signed');
     for (const file of excluded) assert(!signed.includes(file), 'Must not sign ' + file);
   } finally {
-    util.execFileAsync = original;
+    childProcess.execFile = original;
     fs.rmSync(base, {recursive: true, force: true});
   }
 });

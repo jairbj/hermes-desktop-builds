@@ -7,22 +7,34 @@ import {pathToFileURL} from 'node:url';
 const machoMagics = new Set(['cffaedfe', 'feedfacf', 'cefaedfe', 'feedface',
                              'cafebabe', 'bebafeca', 'cafebabf', 'bfbafeca']);
 
+function signingMetadata(pkg) {
+  const build = pkg.build ?? {};
+  const version = build.electronVersion ?? pkg.devDependencies?.electron;
+  assert(version, 'Upstream electron version missing');
+  return {
+    version,
+    entitlements: build.mac?.entitlements ?? 'electron/entitlements.mac.plist',
+    entitlementsInherit: build.mac?.entitlementsInherit ?? 'electron/entitlements.mac.inherit.plist',
+  };
+}
+
 export function signingOptions(source, app) {
   const desktop = path.join(source, 'apps/desktop');
   const pkg = JSON.parse(fs.readFileSync(path.join(desktop, 'package.json')));
+  const metadata = signingMetadata(pkg);
   const unpacked = path.join(app, 'Contents/Resources/app.asar.unpacked') + path.sep;
   const realApp = fs.realpathSync(app);
   return {
     app, platform: 'darwin', type: 'distribution', identity: '-', identityValidation: false,
-    version: pkg.build.electronVersion, strictVerify: true,
+    version: metadata.version, strictVerify: true,
     preAutoEntitlements: false, preEmbedProvisioningProfile: false,
     optionsForFile(file) {
       return {
-        entitlements: path.resolve(desktop, file === app ? pkg.build.mac.entitlements : pkg.build.mac.entitlementsInherit),
+        entitlements: path.resolve(desktop, file === app ? metadata.entitlements : metadata.entitlementsInherit),
         hardenedRuntime: true, timestamp: 'none',
       };
     },
-    // osx-sign 1.3.3 drops array-valued ignore during normalization; use a function.
+    // osx-sign 2.4.0 drops an ignore array and keeps a function.
     ignore(file) {
       // Already signed before ASAR hashing; signing again would stale its integrity header.
       if (file.startsWith(unpacked)) return true;
@@ -45,8 +57,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   const [source, app] = process.argv.slice(2).map(p => path.resolve(p));
   assert(source && app && app.endsWith('.app'));
   const require = createRequire(path.join(source, 'apps/desktop/package.json'));
-  const {signAsync} = require('@electron/osx-sign');
-  await signAsync(signingOptions(source, app));
+  const {sign} = require('@electron/osx-sign');
+  await sign(signingOptions(source, app));
   console.log('Final Mac bundle ad-hoc signed inside-out with upstream entitlements.');
   console.log('No Developer ID, notarization, keychain discovery or security-policy changes.');
 }
