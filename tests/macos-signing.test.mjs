@@ -45,8 +45,11 @@ test('package.json without a build field uses the electron dependency and upstre
   try {
     const options = signingOptions(base, app);
     assert.equal(options.version, '40.10.2');
-    assert.match(options.optionsForFile(app).entitlements, /electron\/entitlements\.mac\.plist$/);
-    assert.match(options.optionsForFile(path.join(app, 'Contents/Frameworks/Helper.app')).entitlements, /electron\/entitlements\.mac\.inherit\.plist$/);
+    assert.equal(options.optionsForFile(app).entitlements, path.resolve(desktop, 'electron/entitlements.mac.plist'));
+    assert.equal(
+      options.optionsForFile(path.join(app, 'Contents/Frameworks/Helper.app')).entitlements,
+      path.resolve(desktop, 'electron/entitlements.mac.inherit.plist'),
+    );
   } finally { fs.rmSync(base, {recursive: true, force: true}); }
 });
 
